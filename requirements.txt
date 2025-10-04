@@ -1,0 +1,4 @@
+PySide6>=6.7
+MDAnalysis>=2.0
+networkx>=3.0
+numpy>=1.23
