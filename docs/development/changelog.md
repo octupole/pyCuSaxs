@@ -223,7 +223,7 @@ None in this release.
 
 ### Planned Fixes
 
-See [Roadmap](../../README.md#roadmap) for upcoming features.
+See [Contributing Guide](contributing.md) for information on planned features and how to contribute.
 
 ## Development Notes
 

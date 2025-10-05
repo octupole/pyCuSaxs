@@ -588,5 +588,5 @@ python -m pycusaxs.main -g 256 ...
 
 - [Installation Guide](getting-started/installation.md)
 - [Configuration](getting-started/configuration.md)
-- [FAQ](faq.md) (if exists)
+- [GitHub Discussions](https://github.com/octupole/pyCuSaxs/discussions) for questions
 - [GitHub Issues](https://github.com/yourusername/pyCuSaxs/issues)
