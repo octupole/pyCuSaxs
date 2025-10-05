@@ -7,7 +7,7 @@
 
 **pyCuSAXS** is a high-performance CUDA-accelerated pipeline for computing Small-Angle X-ray Scattering (SAXS) profiles from molecular dynamics trajectories. It combines a GPU-optimized C++/CUDA backend with Python-based trajectory processing, offering both command-line and graphical user interfaces.
 
-## :microscope: What is Small-Angle X-ray Scattering (SAXS)?
+## 🔬 What is Small-Angle X-ray Scattering (SAXS)?
 
 Small-Angle X-ray Scattering is an experimental technique used to study the structure of materials at the nanometer scale. In molecular biology and biophysics, SAXS provides crucial information about:
 
@@ -23,7 +23,7 @@ pyCuSAXS bridges the gap between MD simulations and experimental SAXS by computi
 - Analysis of conformational ensembles
 - Time-resolved structural changes across MD trajectories
 
-## :package: What's in This Package?
+## 📦 What's in This Package?
 
 pyCuSAXS provides a complete toolkit for SAXS analysis:
 
@@ -34,7 +34,7 @@ pyCuSAXS provides a complete toolkit for SAXS analysis:
 - **Flexible Configuration**: Extensive parameters for customizing calculations
 - **Production Ready**: Comprehensive validation, error handling, and memory safety
 
-## :rocket: Features
+## 🚀 Features
 
 <div class="grid cards" markdown>
 
@@ -76,7 +76,7 @@ pyCuSAXS provides a complete toolkit for SAXS analysis:
 
 </div>
 
-## :computer: Installation
+## 💻 Installation
 
 ### Prerequisites
 
@@ -104,7 +104,7 @@ pip install .
 
 For detailed installation instructions including troubleshooting, see the [Installation Guide](getting-started/installation.md).
 
-## :zap: Quick Start
+## ⚡ Quick Start
 
 ### Command-Line Interface
 
@@ -149,7 +149,7 @@ print(f"SAXS profile: {result['output_file']}")
 
 For more examples, see the [Quick Start Guide](getting-started/quickstart.md).
 
-## :books: Documentation
+## 📚 Documentation
 
 <div class="grid cards" markdown>
 
@@ -179,7 +179,7 @@ For more examples, see the [Quick Start Guide](getting-started/quickstart.md).
 
 </div>
 
-## :chart_with_upwards_trend: Performance
+## 📈 Performance
 
 Recent optimizations (v0.1.0):
 
@@ -196,7 +196,7 @@ Typical performance on NVIDIA RTX 3080:
 | 50K atoms  | 128³ | 1000   | ~35 ms     | ~35 sec    |
 | 200K atoms | 128³ | 1000   | ~85 ms     | ~85 sec    |
 
-## :material-test-tube: Algorithm
+## 🧪 Algorithm
 
 pyCuSAXS implements the SAXS intensity calculation:
 
@@ -219,20 +219,20 @@ The pipeline:
 5. **Scattering Intensity** - Apply form factors and compute $|F(q)|^2$
 6. **Histogram Binning** - Bin by $|q|$ magnitude and average over frames
 
-## :handshake: Contributing
+## 🤝 Contributing
 
 We welcome contributions! See our [development guide](development/contributing.md) for details.
 
-## :scroll: License
+## 📜 License
 
 This project is licensed under the MIT License - see the [LICENSE](https://github.com/octupole/pyCuSaxs/blob/main/LICENSE) file for details.
 
-## :email: Support
+## 📧 Support
 
 - **Issues**: [GitHub Issues](https://github.com/octupole/pyCuSaxs/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/octupole/pyCuSaxs/discussions)
 
-## :material-book-open-variant: Citation
+## 📖 Citation
 
 If you use pyCuSAXS in your research, please cite:
 
@@ -248,5 +248,5 @@ If you use pyCuSAXS in your research, please cite:
 ---
 
 <div align="center">
-  <sub>Built with :heart: for the molecular dynamics community</sub>
+  <sub>Built with ❤️ for the molecular dynamics community</sub>
 </div>
