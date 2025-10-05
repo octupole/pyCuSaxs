@@ -7,6 +7,33 @@
 
 **pyCuSAXS** is a high-performance CUDA-accelerated pipeline for computing Small-Angle X-ray Scattering (SAXS) profiles from molecular dynamics trajectories. It combines a GPU-optimized C++/CUDA backend with Python-based trajectory processing, offering both command-line and graphical user interfaces.
 
+## :microscope: What is Small-Angle X-ray Scattering (SAXS)?
+
+Small-Angle X-ray Scattering is an experimental technique used to study the structure of materials at the nanometer scale. In molecular biology and biophysics, SAXS provides crucial information about:
+
+- **Protein structure and dynamics** in solution
+- **Conformational changes** during molecular dynamics simulations
+- **Validation of MD simulations** against experimental data
+- **Ensemble properties** of flexible biomolecules
+
+pyCuSAXS bridges the gap between MD simulations and experimental SAXS by computing theoretical scattering profiles directly from trajectories, enabling:
+
+- Direct comparison with experimental SAXS curves
+- Validation of simulation force fields and parameters
+- Analysis of conformational ensembles
+- Time-resolved structural changes across MD trajectories
+
+## :package: What's in This Package?
+
+pyCuSAXS provides a complete toolkit for SAXS analysis:
+
+- **GPU-Accelerated Backend**: Optimized C++/CUDA code for high-performance calculations
+- **Python Interface**: Easy-to-use API integrated with MDAnalysis for trajectory handling
+- **Command-Line Tool**: Batch processing and scripting support
+- **Graphical Interface**: Interactive PySide6-based GUI for exploratory analysis
+- **Flexible Configuration**: Extensive parameters for customizing calculations
+- **Production Ready**: Comprehensive validation, error handling, and memory safety
+
 ## :rocket: Features
 
 <div class="grid cards" markdown>
@@ -49,16 +76,41 @@
 
 </div>
 
-## :zap: Quick Start
+## :computer: Installation
 
-Get started with pyCuSAXS in minutes:
+### Prerequisites
+
+Before installing pyCuSAXS, ensure you have:
+
+- **NVIDIA GPU** with CUDA Compute Capability 5.0 or higher
+- **CUDA Toolkit** 11.0 or later ([download here](https://developer.nvidia.com/cuda-downloads))
+- **Python** 3.9 or later
+- **C++ compiler** with C++17 support (GCC 7+, Clang 5+, or MSVC 2019+)
+- **CMake** 3.18 or later
+
+### Quick Install
 
 ```bash
-# Install pyCuSAXS
-pip install -r requirements.txt
-pip install .
+# Clone the repository
+git clone https://github.com/octupole/pyCuSaxs.git
+cd pyCuSaxs
 
-# Run a simple SAXS calculation
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Build and install pyCuSAXS
+pip install .
+```
+
+For detailed installation instructions including troubleshooting, see the [Installation Guide](getting-started/installation.md).
+
+## :zap: Quick Start
+
+### Command-Line Interface
+
+Run a SAXS calculation on your MD trajectory:
+
+```bash
 python -m pycusaxs.main \
     --topology system.tpr \
     --trajectory trajectory.xtc \
@@ -67,11 +119,35 @@ python -m pycusaxs.main \
     --out saxs_profile.dat
 ```
 
-Or launch the graphical interface:
+### Graphical Interface
+
+Launch the interactive GUI:
 
 ```bash
 saxs-widget
 ```
+
+### Python API
+
+Use pyCuSAXS in your Python scripts:
+
+```python
+from pycusaxs.main import cuda_connect
+
+result = cuda_connect(
+    topology="system.tpr",
+    trajectory="trajectory.xtc",
+    grid=[128, 128, 128],
+    begin=0,
+    end=100,
+    dt=10
+)
+
+# Access results
+print(f"SAXS profile: {result['output_file']}")
+```
+
+For more examples, see the [Quick Start Guide](getting-started/quickstart.md).
 
 ## :books: Documentation
 
