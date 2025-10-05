@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.18)
 #list(APPEND CMAKE_PREFIX_PATH "/opt/anaconda3/envs/openSAXS")
 project(cudaSAXS LANGUAGES CXX C CUDA)
+
+# Very important!!!
+
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_INTERPROCEDURAL_OPTIMIZATION OFF)
 

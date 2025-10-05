@@ -17,6 +17,14 @@
 #pragma once
 namespace py = pybind11;
 
+struct FrameData
+{
+    int frame_num;
+    float time;
+    std::vector<std::vector<float>> coords;  // [n_atoms][3] format
+    std::vector<std::vector<float>> box;     // [3][3] format
+};
+
 class RunSaxs
 {
 public:
@@ -28,6 +36,7 @@ public:
 private:
     std::string tpr_file, xtc_file;
     std::vector<int> createVector(int, int, int);
+    bool loadFrameData(py::handle frame_handle, FrameData &data);
 };
 
 #endif

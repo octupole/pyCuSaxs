@@ -6,6 +6,9 @@
 #include <array>
 #include <sstream>
 #include <stdexcept>
+#include "fmt/core.h"
+#include "fmt/format.h"
+#include "fmt/color.h"
 
 namespace
 {
@@ -92,30 +95,102 @@ CudaSaxsResult run_cuda_saxs(py::object Topol, const CudaSaxsConfig &config)
 
     Options::myPadding = Options::Wmodel.empty() ? padding::avg : padding::given;
 
-    std::ostringstream summary;
-    summary << "cudaSAXS configured\n"
-            << "  Topology: " << Options::tpr_file << '\n'
-            << "  Trajectory: " << Options::xtc_file << '\n'
-            << "  Frames: " << config.begin_frame << " -> " << config.end_frame
-            << " (stride " << config.frame_stride << ")\n"
-            << "  Grid: (" << Options::nx << ", " << Options::ny << ", " << Options::nz << ")\n";
+    // Create nice formatted summary using fmt
+    std::string banner = fmt::format(
+        "\n"
+        "╔════════════════════════════════════════════════════════════════╗\n"
+        "║                  cuSAXS Configuration                        ║\n"
+        "╚════════════════════════════════════════════════════════════════╝\n");
 
+    std::string input_section = fmt::format(
+        "\n{}\n"
+        "  Topology      : {}\n"
+        "  Trajectory    : {}\n",
+        fmt::format(fmt::emphasis::bold, "Input Files"),
+        Options::tpr_file,
+        Options::xtc_file);
+
+    int total_frames = (config.end_frame - config.begin_frame) / config.frame_stride + 1;
+    std::string frame_section = fmt::format(
+        "\n{}\n"
+        "  Start Frame   : {}\n"
+        "  End Frame     : {}\n"
+        "  Stride        : {}\n"
+        "  Total Frames  : {}\n",
+        fmt::format(fmt::emphasis::bold, "Frame Selection"),
+        config.begin_frame,
+        config.end_frame,
+        config.frame_stride,
+        total_frames);
+
+    std::string grid_info;
     if (!config.scaled_grid_shape.empty())
     {
-        summary << "  Scaled grid: (" << Options::nnx << ", " << Options::nny << ", " << Options::nnz << ")\n";
+        grid_info = fmt::format(
+            "\n{}\n"
+            "  Primary Grid  : ({}, {}, {})\n"
+            "  Scaled Grid   : ({}, {}, {})\n"
+            "  Spline Order  : {}\n",
+            fmt::format(fmt::emphasis::bold, "Grid Parameters"),
+            Options::nx, Options::ny, Options::nz,
+            Options::nnx, Options::nny, Options::nnz,
+            Options::order);
+    }
+    else
+    {
+        grid_info = fmt::format(
+            "\n{}\n"
+            "  Grid Size     : ({}, {}, {})\n"
+            "  Spline Order  : {}\n",
+            fmt::format(fmt::emphasis::bold, "Grid Parameters"),
+            Options::nx, Options::ny, Options::nz,
+            Options::order);
     }
 
-    summary << "  Order: " << Options::order << '\n'
-            << "  Scale factor: " << Options::sigma << '\n'
-            << "  Bin size: " << Options::Dq << '\n'
-            << "  Q-cut: " << Options::Qcut << '\n';
+    std::string saxs_section = fmt::format(
+        "\n{}\n"
+        "  Scale Factor  : {:.3f}\n"
+        "  Bin Size      : {:.4f}\n"
+        "  Q-cutoff      : {:.3f}\n",
+        fmt::format(fmt::emphasis::bold, "SAXS Parameters"),
+        Options::sigma,
+        Options::Dq,
+        Options::Qcut);
 
+    std::string solvent_info;
     if (!Options::Wmodel.empty())
     {
-        summary << "  Water model: " << Options::Wmodel << '\n';
+        solvent_info = fmt::format(
+            "\n{}\n"
+            "  Water Model   : {}\n"
+            "  Na⁺ atoms     : {}\n"
+            "  Cl⁻ atoms     : {}\n"
+            "  Padding Mode  : {}\n",
+            fmt::format(fmt::emphasis::bold, "Solvent Model"),
+            Options::Wmodel,
+            Options::Sodium,
+            Options::Chlorine,
+            Options::myPadding == padding::given ? "explicit" : "average");
     }
-    summary << "  Na atoms: " << Options::Sodium << '\n'
-            << "  Cl atoms: " << Options::Chlorine;
+    else
+    {
+        solvent_info = fmt::format(
+            "\n{}\n"
+            "  Na⁺ atoms     : {}\n"
+            "  Cl⁻ atoms     : {}\n"
+            "  Padding Mode  : {}\n",
+            fmt::format(fmt::emphasis::bold, "Solvent Model"),
+            Options::Sodium,
+            Options::Chlorine,
+            "average");
+    }
+
+    std::string summary = banner + input_section + frame_section +
+                          grid_info + saxs_section + solvent_info +
+                          "\n" + std::string(66, '-') + "\n";
+
+    // Print to console with color
+    fmt::print(fg(fmt::color::cyan), "{}", summary);
 
     CudaSaxsResult result;
     result.nx = Options::nx;
@@ -124,7 +199,7 @@ CudaSaxsResult run_cuda_saxs(py::object Topol, const CudaSaxsConfig &config)
     result.nnx = Options::nnx;
     result.nny = Options::nny;
     result.nnz = Options::nnz;
-    result.summary = summary.str();
+    result.summary = summary;
 
     RunSaxs saxs(Options::tpr_file, Options::xtc_file);
     saxs.Run(Topol, Options::beginFrame, Options::endFrame, Options::frameStride);

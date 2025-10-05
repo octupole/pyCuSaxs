@@ -33,17 +33,6 @@ def build_output_paths(base: str, frame_range: range) -> List[Path]:
     return [resolve_for_frame(frame) for frame in frame_range]
 
 
-def format_parameters(required_params: Dict[str, Any], advanced_params: Dict[str, Any]) -> str:
-    lines = ["Required Parameters:"]
-    for key, value in required_params.items():
-        lines.append(f"  {key}: {value}")
-
-    lines.append("Advanced Parameters:")
-    for key, value in advanced_params.items():
-        lines.append(f"  {key}: {value}")
-    return "\n".join(lines)
-
-
 def _invoke_cuda_backend(required_params: Dict[str, Any], 
                          advanced_params: Dict[str, Any], topology: Topology) -> List[str]:
     try:
@@ -140,7 +129,6 @@ class SaxsMainWindow(SaxsParametersWindow):
             return
 
         advanced_params = self.advanced_widget.parameters()
-        summary = format_parameters(required_params, advanced_params)
 
         try:
             results = list(cuda_connect(required_params, advanced_params))
@@ -148,7 +136,9 @@ class SaxsMainWindow(SaxsParametersWindow):
             QMessageBox.critical(self, "Execution failed", str(exc))
             return
 
-        message = "\n".join([summary, "", *results])
+        # C++ backend now prints nice formatted configuration
+        # Display any additional results in the GUI
+        message = "\n".join(results) if results else "SAXS calculation completed successfully."
         self.output_view.setPlainText(message)
         print(message)
 
@@ -284,16 +274,13 @@ def _run_cli(namespace: argparse.Namespace) -> int:
         "chlorine": namespace.cl,
     }
 
-    summary = format_parameters(required_params, advanced_params)
-
     try:
         results = list(cuda_connect(required_params, advanced_params))
     except Exception as exc:  # pragma: no cover - CLI feedback
         print(f"Error: {exc}", file=sys.stderr)
         return 1
 
-    print(summary)
-    print()
+    # Summary is now printed by the C++ backend with nice formatting
     # for line in results:
     #     print(line)
     return 0
