@@ -18,6 +18,22 @@ find_package(pybind11 CONFIG REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(fmt CONFIG REQUIRED)
 
+# Require a usable NVIDIA driver stack so CUDA kernels can execute.
+find_program(CUSAXS_NVIDIA_SMI nvidia-smi)
+if(NOT CUSAXS_NVIDIA_SMI)
+    message(FATAL_ERROR "CuSAXS requires an NVIDIA GPU with the driver tools installed (nvidia-smi not found).")
+endif()
+
+execute_process(
+    COMMAND ${CUSAXS_NVIDIA_SMI} --query-gpu=name --format=csv,noheader
+    OUTPUT_VARIABLE CUSAXS_GPU_LIST
+    RESULT_VARIABLE CUSAXS_GPU_RESULT
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT CUSAXS_GPU_RESULT EQUAL 0 OR CUSAXS_GPU_LIST STREQUAL "")
+    message(FATAL_ERROR "CuSAXS requires at least one NVIDIA GPU; nvidia-smi did not report any devices.")
+endif()
+
 if(NOT TARGET CUDA::cudadevrt)
     find_library(CUDA_cudadevrt_LIBRARY
         NAMES cudadevrt
