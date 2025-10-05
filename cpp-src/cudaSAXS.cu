@@ -99,7 +99,7 @@ CudaSaxsResult run_cuda_saxs(py::object Topol, const CudaSaxsConfig &config)
     std::string banner = fmt::format(
         "\n"
         "╔════════════════════════════════════════════════════════════════╗\n"
-        "║                  cuSAXS Configuration                        ║\n"
+        "║                  CuSAXS Configuration                         ║\n"
         "╚════════════════════════════════════════════════════════════════╝\n");
 
     std::string input_section = fmt::format(

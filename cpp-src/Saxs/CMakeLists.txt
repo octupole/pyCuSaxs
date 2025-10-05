@@ -1,6 +1,6 @@
 #[[
  * @file Saxs/CMakeLists.txt
- * @brief Modern CMake configuration for the cudaSAXS SAXS computation library.
+ * @brief Modern CMake configuration for the CuSAXS SAXS computation library.
  *
  * This library provides the core SAXS calculation functionality including:
  * - SAXS kernel operations

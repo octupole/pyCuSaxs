@@ -1,6 +1,6 @@
 #[[
  * @file Exec/CMakeLists.txt
- * @brief Modern CMake configuration for the cudaSAXS execution library.
+ * @brief Modern CMake configuration for the CuSAXS execution library.
  *
  * This library provides the main execution functionality including:
  * - RunSaxs main execution class

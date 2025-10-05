@@ -1,6 +1,6 @@
 #[[
  * @file Utilities/CMakeLists.txt
- * @brief Modern CMake configuration for the cudaSAXS utilities library.
+ * @brief Modern CMake configuration for the CuSAXS utilities library.
  *
  * This library provides utility functions and classes including:
  * - B-Spline operations

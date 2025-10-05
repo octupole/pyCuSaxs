@@ -59,7 +59,7 @@ namespace
 
 PYBIND11_MODULE(pycusaxs_cuda, m)
 {
-    m.doc() = "Pybind11 interface for configuring cudaSAXS";
+    m.doc() = "Pybind11 interface for configuring CuSAXS";
 
     m.def(
         "run",

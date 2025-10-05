@@ -246,7 +246,7 @@ void RunSaxs::Run(py::object Topol, int beg, int end, int dt)
         std::string banner = fmt::format(
             "\n=========================================================\n"
             "=                                                       =\n"
-            "=                   cudaSAXS Timing                     =\n"
+            "=                    CuSAXS Timing                     =\n"
             "=                                                       =\n"
             "=           CUDA Time:     {:<10.2f} ms/per step       =\n"
             "=           Read Time:     {:<10.2f} ms/per step       =\n"

@@ -431,7 +431,7 @@ void saxsKernel::writeBanner()
             "* {:<10} {:>4.3f}     {:<10}  {:>3.1f}          *\n"
             "* {:<10}           {:<14}           *\n"
             "*************************************************\n\n",
-            "Running cudaSAXS", "Cell Grid", Options::nx, Options::ny, Options::nz,
+            "Running CuSAXS", "Cell Grid", Options::nx, Options::ny, Options::nz,
             "Supercell Grid", Options::nnx, Options::nny, Options::nnz, "Order",
             Options::order, "Sigma", Options::sigma, "Bin Size", Options::Dq, "Q Cutoff ", Options::Qcut, "Padding ", padding);
     }
@@ -447,7 +447,7 @@ void saxsKernel::writeBanner()
             "* {:<10}           {:<14}           *\n"
             "* {:<10} {:>4d}      {:<10} {:>4d}          *\n"
             "*************************************************\n\n",
-            "Running cudaSAXS", "Cell Grid", Options::nx, Options::ny, Options::nz,
+            "Running CuSAXS", "Cell Grid", Options::nx, Options::ny, Options::nz,
             "Supercell Grid", Options::nnx, Options::nny, Options::nnz, "Order",
             Options::order, "Sigma", Options::sigma, "Bin Size", Options::Dq, "Q Cutoff ",
             Options::Qcut, "Padding ", padding,

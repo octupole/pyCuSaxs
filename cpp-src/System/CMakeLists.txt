@@ -1,6 +1,6 @@
 #[[
  * @file System/CMakeLists.txt
- * @brief Modern CMake configuration for the cudaSAXS system library.
+ * @brief Modern CMake configuration for the CuSAXS system library.
  *
  * This library provides system-level functionality including:
  * - Cell and lattice operations
