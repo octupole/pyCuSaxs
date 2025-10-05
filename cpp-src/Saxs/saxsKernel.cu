@@ -104,6 +104,7 @@ void saxsKernel::runPKernel(int frame, float Time, std::vector<std::vector<float
 
     // zeroes the Sup density grid
     zeroDensityKernel<<<numBlocksGridSuperAcc, THREADS_PER_BLOCK>>>(d_gridSupAcc_ptr, d_gridSupAcc.size());
+    // No sync needed - will be used later after loop
 
     float totParticles{0};
     std::string formatted_string = fmt::format("--> Frame: {:<7}  Time Step: {:.2f} fs", frame, Time);
@@ -141,13 +142,10 @@ void saxsKernel::runPKernel(int frame, float Time, std::vector<std::vector<float
 
         //    Kernels launch for the rhoKernel
         zeroDensityKernel<<<numBlocksGrid, THREADS_PER_BLOCK>>>(d_grid_ptr, d_grid.size());
-        cudaDeviceSynchronize();
-        // Check for errors
+        // No sync needed - rhoCartKernel will wait for zeroDensityKernel to complete
         rhoCartKernel<<<numBlocks, THREADS_PER_BLOCK>>>(d_particles_ptr, d_oc_or_ptr, d_grid_ptr, order,
                                                         numParticles, nx, ny, nz);
 
-        // Synchronize the device
-        cudaDeviceSynchronize();
         // picking the padding
         float myDens = 0.0f;
         if (Options::myPadding == padding::avg)
@@ -159,7 +157,7 @@ void saxsKernel::runPKernel(int frame, float Time, std::vector<std::vector<float
             paddingKernel<<<gridDim0, blockDim>>>(d_grid_ptr, nx, ny, nz, mx, my, mz,
                                                   thrust::raw_pointer_cast(d_Dens.data()),
                                                   thrust::raw_pointer_cast(d_count.data()));
-            // Synchronize the device
+            // REQUIRED: Must sync before copying results back to host
             cudaDeviceSynchronize();
             h_Dens = d_Dens;
             h_count = d_count;
@@ -175,30 +173,28 @@ void saxsKernel::runPKernel(int frame, float Time, std::vector<std::vector<float
 
         // zeroes the Sup density grid
         zeroDensityKernel<<<numBlocksGridSuperC, THREADS_PER_BLOCK>>>(d_gridSupC_ptr, d_gridSupC.size());
-        cudaDeviceSynchronize();
+        // No sync needed - superDensityKernel doesn't use d_gridSupC
 
         superDensityKernel<<<gridDimR, blockDim>>>(d_grid_ptr, d_gridSup_ptr, myDens, nx, ny, nz, nnx, nny, nnz);
-        // Synchronize the device
-        cudaDeviceSynchronize();
+        // No sync needed - cufftExecR2C will wait for superDensityKernel
 
         cufftExecR2C(plan, d_gridSup_ptr, d_gridSupC_ptr);
-        // Synchronize the device
-        cudaDeviceSynchronize();
+        // No sync needed - scatterKernel will wait for FFT
 
         thrust::host_vector<float> h_nato = {0.0f};
         thrust::device_vector<float> d_nato = h_nato;
         scatterKernel<<<gridDim, blockDim>>>(d_gridSupC_ptr, d_gridSupAcc_ptr, d_oc_ptr, d_scatter_ptr, nnx, nny, nnz, kcut, thrust::raw_pointer_cast(d_nato.data()));
+        // REQUIRED: Must sync before copying d_nato back to host
         cudaDeviceSynchronize();
         h_nato = d_nato;
         totParticles += h_nato[0];
     }
     modulusKernel<<<gridDim, blockDim>>>(d_gridSupAcc_ptr, d_moduleX_ptr, d_moduleY_ptr, d_moduleZ_ptr, nnx, nny, nnz);
-    // // Synchronize the device
-    cudaDeviceSynchronize();
+    // No sync needed - next kernel will wait
     if (Options::Simulation == "nvt")
     {
         gridAddKernel<<<numBlocksGridIq, THREADS_PER_BLOCK>>>(d_gridSupAcc_ptr, d_Iq_ptr, d_Iq.size());
-        cudaDeviceSynchronize();
+        // No sync needed - results stay on GPU
         frame_count++;
     }
     else if (Options::Simulation == "npt")
@@ -206,7 +202,7 @@ void saxsKernel::runPKernel(int frame, float Time, std::vector<std::vector<float
 
         calculate_histogram<<<gridDim, blockDim>>>(d_gridSupAcc_ptr, d_histogram_ptr, d_nhist_ptr, d_oc_ptr, nnx, nny, nnz,
                                                    bin_size, kcut, num_bins);
-        cudaDeviceSynchronize();
+        // No sync needed - histogram results stay on GPU
     }
     cudaEventRecord(stop);
     cudaEventSynchronize(stop);
@@ -272,6 +268,9 @@ void saxsKernel::createMemory()
     thrust::host_vector<float> h_moduleY = bsp_modx->ModY();
     thrust::host_vector<float> h_moduleZ = bsp_modx->ModZ();
 
+    // Clean up dynamically allocated memory
+    delete bsp_modx;
+
     d_moduleX = h_moduleX;
     d_moduleY = h_moduleY;
     d_moduleZ = h_moduleZ;
@@ -305,22 +304,52 @@ void saxsKernel::createMemory()
 std::vector<long long> saxsKernel::generateMultiples(long long limit)
 {
     std::vector<long long> multiples;
-    for (int a = 0; std::pow(2, a) <= limit; ++a)
+    // Use bitwise operations and precomputed powers to avoid overflow
+    // instead of std::pow which can overflow with large exponents
+    for (int a = 0; (1LL << a) <= limit; ++a)
     {
-        for (int b = 0; std::pow(2, a) * std::pow(3, b) <= limit; ++b)
+        long long pow2 = 1LL << a; // 2^a using bit shift
+        for (int b = 0; ; ++b)
         {
-            for (int c = 0; std::pow(2, a) * std::pow(3, b) * std::pow(5, c) <= limit; ++c)
+            long long pow3 = 1LL;
+            for (int i = 0; i < b; ++i)
             {
-                for (int d = 0; std::pow(2, a) * std::pow(3, b) * std::pow(5, c) * std::pow(7, d) <= limit; ++d)
-                {
-                    long long multiple = std::pow(2, a) * std::pow(3, b) * std::pow(5, c) * std::pow(7, d);
-                    if (multiple <= limit)
-                    {
-                        multiples.push_back(multiple);
-                    }
-                }
+                // Check for overflow before multiplication
+                if (pow3 > limit / 3) goto next_a;
+                pow3 *= 3;
             }
+            long long pow23 = pow2 * pow3;
+            if (pow23 > limit) break;
+
+            for (int c = 0; ; ++c)
+            {
+                long long pow5 = 1LL;
+                for (int i = 0; i < c; ++i)
+                {
+                    if (pow5 > limit / 5) goto next_b;
+                    pow5 *= 5;
+                }
+                long long pow235 = pow23 * pow5;
+                if (pow235 > limit) break;
+
+                for (int d = 0; ; ++d)
+                {
+                    long long pow7 = 1LL;
+                    for (int i = 0; i < d; ++i)
+                    {
+                        if (pow7 > limit / 7) goto next_c;
+                        pow7 *= 7;
+                    }
+                    long long multiple = pow235 * pow7;
+                    if (multiple > limit) break;
+
+                    multiples.push_back(multiple);
+                }
+                next_c:;
+            }
+            next_b:;
         }
+        next_a:;
     }
     std::sort(multiples.begin(), multiples.end());
     multiples.erase(std::unique(multiples.begin(), multiples.end()), multiples.end());
@@ -458,4 +487,9 @@ void saxsKernel::writeBanner()
 
 saxsKernel::~saxsKernel()
 {
+    // Clean up cuFFT plan to prevent resource leak
+    if (cufftPlan != 0)
+    {
+        cufftDestroy(cufftPlan);
+    }
 }

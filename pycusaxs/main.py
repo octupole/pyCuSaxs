@@ -16,7 +16,25 @@ from .topology import Topology
 
 def build_output_paths(base: str, frame_range: range) -> List[Path]:
     """Derive per-frame PDB paths from a base filename or directory."""
-    base_path = Path(base).expanduser() if base else None
+    base_path = None
+    if base:
+        # Sanitize path: resolve to absolute path and check for directory traversal
+        try:
+            base_path = Path(base).expanduser().resolve()
+            # Prevent directory traversal outside of current working directory or home
+            cwd = Path.cwd().resolve()
+            home = Path.home().resolve()
+
+            # Check if path is within allowed directories
+            try:
+                base_path.relative_to(cwd)
+            except ValueError:
+                try:
+                    base_path.relative_to(home)
+                except ValueError:
+                    raise ValueError(f"Path '{base}' is outside allowed directories")
+        except (OSError, RuntimeError) as e:
+            raise ValueError(f"Invalid path '{base}': {e}")
 
     def resolve_for_frame(frame: int) -> Path:
         if base_path is None:
@@ -80,8 +98,26 @@ def _invoke_cuda_backend(required_params: Dict[str, Any],
     return [summary]
 
 def cuda_connect(required_params: Dict[str, Any], advanced_params: Dict[str, Any]) -> Iterable[str]:
-    topology_path = Path(required_params["topology"]).expanduser()
-    trajectory_path = Path(required_params["trajectory"]).expanduser()
+    # Sanitize file paths
+    try:
+        topology_path = Path(required_params["topology"]).expanduser().resolve()
+        trajectory_path = Path(required_params["trajectory"]).expanduser().resolve()
+    except (OSError, RuntimeError) as e:
+        raise ValueError(f"Invalid file path: {e}")
+
+    # Validate paths are within allowed directories
+    cwd = Path.cwd().resolve()
+    home = Path.home().resolve()
+
+    for file_path, name in [(topology_path, "topology"), (trajectory_path, "trajectory")]:
+        try:
+            file_path.relative_to(cwd)
+        except ValueError:
+            try:
+                file_path.relative_to(home)
+            except ValueError:
+                raise ValueError(f"{name.capitalize()} file path is outside allowed directories: {file_path}")
+
     begin = int(required_params["initial_frame"])
     end = int(required_params["last_frame"])
 

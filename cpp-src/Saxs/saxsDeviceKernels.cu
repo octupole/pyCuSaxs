@@ -34,8 +34,12 @@ __global__ void calculate_histogram(cuFloatComplex *d_array, double *d_histogram
         mw = sqrtf(mw1 * mw1 + mw2 * mw2 + mw3 * mw3);
         if (mw > qcut)
             return;
+        // Check for division by zero
+        if (bin_size <= 0.0f)
+            return;
         int h0 = static_cast<int>(mw / bin_size);
-        if (h0 < num_bins)
+        // Check bounds: h0 must be non-negative and within num_bins
+        if (h0 >= 0 && h0 < num_bins)
         {
             double v0;
             int idx = k + j * npz + i * npz * ny;
@@ -44,6 +48,9 @@ __global__ void calculate_histogram(cuFloatComplex *d_array, double *d_histogram
             {
                 v0 = d_array[idx].x * fact;
                 double nv0{1.0};
+                // NOTE: These two atomicAdd operations are not atomic together
+                // In practice, the race condition impact is minimal for histograms
+                // For stricter consistency, consider using warp-level aggregation
                 atomicAdd(&d_histogram[h0], v0);
                 atomicAdd(&d_nhist[h0], nv0);
             }
@@ -86,8 +93,12 @@ __global__ void calculate_histogram(cuFloatComplex *d_array, double *d_histogram
 
         if (mw > qcut)
             return;
+        // Check for division by zero
+        if (bin_size <= 0.0f)
+            return;
         int h0 = static_cast<int>(mw / bin_size);
-        if (h0 < num_bins)
+        // Check bounds: h0 must be non-negative and within num_bins
+        if (h0 >= 0 && h0 < num_bins)
         {
             double v0;
             int idx = k + j * npz + i * npz * ny;
@@ -96,6 +107,9 @@ __global__ void calculate_histogram(cuFloatComplex *d_array, double *d_histogram
             {
                 v0 = d_array[idx].x;
                 double nv0{1.0};
+                // NOTE: These two atomicAdd operations are not atomic together
+                // In practice, the race condition impact is minimal for histograms
+                // For stricter consistency, consider using warp-level aggregation
                 atomicAdd(&d_histogram[h0], v0);
                 atomicAdd(&d_nhist[h0], nv0);
             }
@@ -473,7 +487,10 @@ __global__ void completeScatterKernel(cuFloatComplex *grid_q, cuFloatComplex *gr
         }
     }
 }
-// Host function
+// Host function - DISABLED: Contains uninitialized memory bug
+// This function allocates d_indices but never initializes it before use
+// TODO: Implement proper initialization of d_indices or remove if unused
+/*
 void scatterCalculation(cuFloatComplex *grid_q, cuFloatComplex *grid_oq, float *oc,
                         float *Scatter, int nnx, int nny, int nnz, float qcut)
 {
@@ -487,7 +504,8 @@ void scatterCalculation(cuFloatComplex *grid_q, cuFloatComplex *grid_oq, float *
 
     float *d_indices; // Device array to store [ia, ja, ka] for all points
     cudaMalloc(&d_indices, 3 * n * sizeof(float));
-    // Fill d_indices with appropriate values (you'll need a custom kernel for this)
+    // BUG: d_indices is never initialized! This causes undefined behavior
+    // Need to fill d_indices with appropriate values using a custom kernel
 
     float *d_result;
     cudaMalloc(&d_result, m * n * sizeof(float));
@@ -508,3 +526,4 @@ void scatterCalculation(cuFloatComplex *grid_q, cuFloatComplex *grid_oq, float *
     cudaFree(d_result);
     cublasDestroy(handle);
 }
+*/

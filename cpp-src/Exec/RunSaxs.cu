@@ -225,12 +225,28 @@ void RunSaxs::Run(py::object Topol, int beg, int end, int dt)
         // Write results
         std::ofstream myfile;
         myfile.open(Options::outFile);
+        if (!myfile.is_open())
+        {
+            throw std::runtime_error("Failed to open output file: " + Options::outFile);
+        }
+
         for (auto data : myhisto)
         {
             myfile << std::fixed << std::setw(10) << std::setprecision(5) << data[0];
             myfile << std::scientific << std::setprecision(5) << std::setw(12) << data[1] << std::endl;
+
+            if (!myfile.good())
+            {
+                myfile.close();
+                throw std::runtime_error("Error writing to output file: " + Options::outFile);
+            }
         }
         myfile.close();
+
+        if (myfile.fail())
+        {
+            throw std::runtime_error("Error closing output file: " + Options::outFile);
+        }
 
         // Print timing information
         auto frames_to_process = createVector(start_frame, stop_frame, stride);

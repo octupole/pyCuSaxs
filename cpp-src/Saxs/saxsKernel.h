@@ -30,7 +30,7 @@
 class saxsKernel
 {
 public:
-    saxsKernel(int _nx, int _ny, int _nz, int _order) : nx{_nx}, ny{_ny}, nz{_nz}, order(_order) {};
+    saxsKernel(int _nx, int _ny, int _nz, int _order) : nx{_nx}, ny{_ny}, nz{_nz}, order(_order), cufftPlan(0) {};
     void setnpx(int _npx, int _npy, int _npz)
     {
         npx = _npx;
