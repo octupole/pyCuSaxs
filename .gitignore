@@ -51,6 +51,7 @@ export/
 \#* 
 *.whl
 *.xtc
+.env
 !CMakeLists.txt
 !requirements.txt
 !requirements.testing.txt
