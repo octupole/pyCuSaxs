@@ -55,7 +55,7 @@ target_link_libraries(utils
         CUDA::cudart
         CUDA::cufft
     PRIVATE
-        fmt::fmt
+        ${FMT_TARGET}
 )
 
 # Compiler-specific options

@@ -61,7 +61,7 @@ target_link_libraries(exec
         Python3::Python
         pybind11::module
     PRIVATE
-        fmt::fmt
+        ${FMT_TARGET}
         CUDA::cudart
 )
 

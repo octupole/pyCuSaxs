@@ -17,33 +17,21 @@ find_package(pybind11 REQUIRED)
 find_package(CUDAToolkit REQUIRED)
 find_package(fmt REQUIRED)
 
-# Prefer static linking for fmt to avoid runtime library version mismatches
+# Use header-only fmt to avoid runtime library linking issues
+# This eliminates version mismatches between build and runtime environments
 if(TARGET fmt::fmt-header-only)
-    # Header-only version is best - no linking issues
     set(FMT_TARGET fmt::fmt-header-only)
+    message(STATUS "Using header-only fmt (no runtime linking required)")
 else()
-    # Try to use static library if available
-    set(FMT_TARGET fmt::fmt)
-    get_target_property(FMT_TYPE fmt::fmt TYPE)
-    if(FMT_TYPE STREQUAL "SHARED_LIBRARY")
-        # Force static linking by looking for static library
-        find_library(FMT_STATIC_LIB
-            NAMES libfmt.a fmt
-            HINTS ${fmt_DIR}/../../../lib ${fmt_DIR}/../../..
-            PATH_SUFFIXES lib lib64
-        )
-        if(FMT_STATIC_LIB)
-            message(STATUS "Using static fmt library: ${FMT_STATIC_LIB}")
-            add_library(fmt::fmt_static STATIC IMPORTED)
-            set_target_properties(fmt::fmt_static PROPERTIES
-                IMPORTED_LOCATION "${FMT_STATIC_LIB}"
-                INTERFACE_INCLUDE_DIRECTORIES "$<TARGET_PROPERTY:fmt::fmt,INTERFACE_INCLUDE_DIRECTORIES>"
-            )
-            set(FMT_TARGET fmt::fmt_static)
-        else()
-            message(WARNING "Could not find static fmt library, using dynamic linking")
-        endif()
-    endif()
+    # Fallback: create header-only target manually
+    message(STATUS "Creating header-only fmt target from fmt::fmt")
+    add_library(fmt_header_only INTERFACE)
+    target_include_directories(fmt_header_only INTERFACE
+        $<TARGET_PROPERTY:fmt::fmt,INTERFACE_INCLUDE_DIRECTORIES>
+    )
+    target_compile_definitions(fmt_header_only INTERFACE FMT_HEADER_ONLY=1)
+    set(FMT_TARGET fmt_header_only)
+    message(STATUS "Using manually created header-only fmt target")
 endif()
 # CUDA architectures - set explicitly to avoid auto-detection issues
 set(CMAKE_CUDA_ARCHITECTURES "75;80;86;89" CACHE STRING "CUDA architectures to build for" FORCE)

@@ -66,7 +66,7 @@ target_link_libraries(saxs
         CUDA::cublas
         CUDA::cudart
     PRIVATE
-        fmt::fmt
+        ${FMT_TARGET}
 )
 
 # CUDA-specific compile options

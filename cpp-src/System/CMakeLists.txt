@@ -47,7 +47,7 @@ target_link_libraries(system
     PUBLIC
         cudaSAXS::utils
     PRIVATE
-        fmt::fmt
+        ${FMT_TARGET}
 )
 
 # Target-specific compile definitions
