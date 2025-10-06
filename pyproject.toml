@@ -21,6 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
+pycusaxs = "pycusaxs.main:main"
 saxs-widget = "pycusaxs.main:main"
 
 [tool.scikit-build]

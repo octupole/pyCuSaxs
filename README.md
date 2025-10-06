@@ -103,11 +103,12 @@ python -c "import pycusaxs_cuda; print('CUDA backend loaded successfully')"
 # Check if package is properly installed
 python -c "import pycusaxs; print('pycusaxs package loaded successfully')"
 
-# Launch GUI (saxs-widget command is available after pip install)
-saxs-widget
+# Test installed commands (available after pip install)
+pycusaxs --help        # CLI with arguments, or GUI if no arguments
+saxs-widget            # Always launches GUI
 ```
 
-**Note:** If you haven't run `pip install .` yet, use `python -m pycusaxs.main` to launch the GUI directly from the source directory.
+**Note:** If you haven't run `pip install .` yet, use `python -m pycusaxs.main` to run directly from the source directory.
 
 ---
 
@@ -116,7 +117,17 @@ saxs-widget
 ### Basic Example
 
 ```bash
-# Compute SAXS profile from trajectory
+# After installation - using the pycusaxs command:
+pycusaxs \
+    --topology system.tpr \
+    --trajectory trajectory.xtc \
+    --grid 128,128,128 \
+    --begin 0 \
+    --end 100 \
+    --dt 10 \
+    --out saxs_profile.dat
+
+# Or from source directory without installation:
 python -m pycusaxs.main \
     --topology system.tpr \
     --trajectory trajectory.xtc \
@@ -133,7 +144,8 @@ The GUI provides file browsers, parameter persistence, and real-time output disp
 
 ```bash
 # After installation (pip install .):
-saxs-widget
+pycusaxs              # No arguments defaults to GUI
+saxs-widget           # Always launches GUI
 
 # Running from source directory without installation:
 python -m pycusaxs.main          # No arguments defaults to GUI
@@ -156,6 +168,10 @@ python -m pycusaxs.main gui      # Explicit GUI mode
 #### Basic Usage
 
 ```bash
+# After installation:
+pycusaxs [OPTIONS]
+
+# Or from source directory:
 python -m pycusaxs.main [OPTIONS]
 ```
 
@@ -185,7 +201,7 @@ python -m pycusaxs.main [OPTIONS]
 
 **Basic SAXS calculation:**
 ```bash
-python -m pycusaxs.main \
+pycusaxs \
     -s protein.tpr \
     -x md_trajectory.xtc \
     -g 64,64,64 \
@@ -195,7 +211,7 @@ python -m pycusaxs.main \
 
 **High-resolution with custom grid scaling:**
 ```bash
-python -m pycusaxs.main \
+pycusaxs \
     -s system.tpr \
     -x traj.xtc \
     -g 128 \
@@ -208,7 +224,7 @@ python -m pycusaxs.main \
 
 **With explicit solvent model:**
 ```bash
-python -m pycusaxs.main \
+pycusaxs \
     -s solvated.tpr \
     -x md.xtc \
     -g 100 \
