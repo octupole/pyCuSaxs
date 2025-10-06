@@ -5,11 +5,16 @@ from __future__ import annotations
 
 import argparse
 import sys
+import os
+import io
+from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
 from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import QObject, Signal, QTimer, QProcess
 
+from .saxs_defaults import SaxsDefaults
 from .saxs_widget import SaxsParametersWindow
 from .topology import Topology
 
@@ -70,7 +75,7 @@ def _invoke_cuda_backend(required_params: Dict[str, Any],
 
     begin = int(required_params["initial_frame"])
     end = int(required_params["last_frame"])
-    stride = max(1, int(advanced_params.get("dt", 1)))
+    stride = max(1, int(advanced_params.get("dt", SaxsDefaults.DT)))
 
     try:
         result = pycusaxs_cuda.run(
@@ -82,14 +87,18 @@ def _invoke_cuda_backend(required_params: Dict[str, Any],
             begin=begin,
             end=end,
             stride=stride,
-            output=advanced_params.get("out", ""),
-            order=int(advanced_params.get("order", 4)),
-            scale_factor=float(advanced_params.get("scale_factor", 1.0)),
-            bin_size=float(advanced_params.get("bin_size", 0.0)),
-            qcut=float(advanced_params.get("qcut", 0.0)),
-            water_model=str(advanced_params.get("water_model", "")),
-            sodium=int(advanced_params.get("sodium", 0)),
-            chlorine=int(advanced_params.get("chlorine", 0)),
+            output=advanced_params.get("out", SaxsDefaults.OUTPUT),
+            order=int(advanced_params.get("order", SaxsDefaults.ORDER)),
+            scale_factor=float(advanced_params.get(
+                "scale_factor", SaxsDefaults.SCALE_FACTOR)),
+            bin_size=float(advanced_params.get(
+                "bin_size", SaxsDefaults.BIN_SIZE)),
+            qcut=float(advanced_params.get("qcut", SaxsDefaults.QCUT)),
+            water_model=str(advanced_params.get(
+                "water_model", SaxsDefaults.WATER_MODEL)),
+            sodium=int(advanced_params.get("sodium", SaxsDefaults.SODIUM)),
+            chlorine=int(advanced_params.get(
+                "chlorine", SaxsDefaults.CHLORINE)),
             simulation=str(advanced_params.get("simulation", "")),
         )
     except Exception as exc:  # pragma: no cover - delegates to C++
@@ -165,6 +174,10 @@ def cuda_connect(required_params: Dict[str, Any], advanced_params: Dict[str, Any
 class SaxsMainWindow(SaxsParametersWindow):
     """Specialized window that runs trajectory export when Execute is pressed."""
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.process = None
+
     def execute(self) -> None:  # type: ignore[override]
         try:
             required_params = self.required_widget.parameters()
@@ -174,32 +187,109 @@ class SaxsMainWindow(SaxsParametersWindow):
 
         advanced_params = self.advanced_widget.parameters()
 
-        try:
-            results = list(cuda_connect(required_params, advanced_params))
-        except Exception as exc:  # pragma: no cover - GUI feedback
-            QMessageBox.critical(self, "Execution failed", str(exc))
+        # Validate grid_scaled and scale_factor
+        if advanced_params.get('grid_scaled', 0) == 0 and advanced_params.get('scale_factor', 0.0) == 0.0:
+            QMessageBox.warning(
+                self,
+                "Invalid Parameters",
+                "Both grid_scaled and scale_factor are zero. Either set grid_scaled > 0 or scale_factor > 0."
+            )
             return
 
-        # C++ backend now prints nice formatted configuration
-        # Display any additional results in the GUI
-        message = "\n".join(
-            results) if results else "SAXS calculation completed successfully."
-        self.output_view.setPlainText(message)
-        print(message)
+        # Build CLI command
+        cli_command = self.build_cli_command(required_params, advanced_params)
+        self.cli_preview.setPlainText(cli_command)
+
+        # Clear previous output
+        self.output_view.setPlainText("Starting SAXS calculation...\n")
+        self.output_view.repaint()
+
+        # Build command arguments
+        args = ["python", "-m", "pycusaxs.main"]
+
+        # Add required arguments
+        args.extend(["-s", str(required_params['topology'])])
+        args.extend(["-x", str(required_params['trajectory'])])
+
+        # Add grid
+        grid = required_params['grid_size']
+        if isinstance(grid, tuple) and len(grid) == 3:
+            if grid[0] == grid[1] == grid[2]:
+                args.extend(["-g", str(grid[0])])
+            else:
+                args.extend(["-g", f"{grid[0]},{grid[1]},{grid[2]}"])
+
+        # Add frame range
+        args.extend(["-b", str(required_params['initial_frame'])])
+        args.extend(["-e", str(required_params['last_frame'])])
+
+        # Add advanced parameters if not default
+        if advanced_params.get('out'):
+            args.extend(["-o", str(advanced_params['out'])])
+        if advanced_params.get('dt', SaxsDefaults.DT) != SaxsDefaults.DT:
+            args.extend(["--dt", str(advanced_params['dt'])])
+        if advanced_params.get('order', SaxsDefaults.ORDER) != SaxsDefaults.ORDER:
+            args.extend(["--order", str(advanced_params['order'])])
+        if advanced_params.get('grid_scaled', SaxsDefaults.GRID_SCALED) != SaxsDefaults.GRID_SCALED:
+            args.extend(["--gridS", str(advanced_params['grid_scaled'])])
+        if advanced_params.get('scale_factor', SaxsDefaults.SCALE_FACTOR) != SaxsDefaults.SCALE_FACTOR:
+            args.extend(["--Scale", str(advanced_params['scale_factor'])])
+        if advanced_params.get('bin_size', SaxsDefaults.BIN_SIZE) != SaxsDefaults.BIN_SIZE:
+            args.extend(["--bin", str(advanced_params['bin_size'])])
+        if advanced_params.get('qcut', SaxsDefaults.QCUT) != SaxsDefaults.QCUT:
+            args.extend(["-q", str(advanced_params['qcut'])])
+        if advanced_params.get('water_model'):
+            args.extend(["--water", str(advanced_params['water_model'])])
+        if advanced_params.get('sodium', SaxsDefaults.SODIUM) != SaxsDefaults.SODIUM:
+            args.extend(["--na", str(advanced_params['sodium'])])
+        if advanced_params.get('chlorine', SaxsDefaults.CHLORINE) != SaxsDefaults.CHLORINE:
+            args.extend(["--cl", str(advanced_params['chlorine'])])
+
+        # Create and setup QProcess
+        self.process = QProcess(self)
+        self.process.setProcessChannelMode(
+            QProcess.ProcessChannelMode.MergedChannels)
+
+        # Connect signals for real-time output
+        def append_output():
+            data = self.process.readAllStandardOutput().data().decode('utf-8', errors='replace')
+            self.output_view.appendPlainText(data.rstrip())
+            self.output_view.verticalScrollBar().setValue(
+                self.output_view.verticalScrollBar().maximum()
+            )
+
+        def handle_finished(exit_code, exit_status):
+            if exit_code == 0:
+                self.output_view.appendPlainText(
+                    "\n=== Completed Successfully ===")
+            else:
+                self.output_view.appendPlainText(
+                    f"\n=== Process exited with code {exit_code} ===")
+
+        def handle_error(error):
+            error_msg = f"Process error: {error}"
+            self.output_view.appendPlainText(error_msg)
+            QMessageBox.critical(self, "Execution Error", error_msg)
+
+        self.process.readyReadStandardOutput.connect(append_output)
+        self.process.finished.connect(handle_finished)
+        self.process.errorOccurred.connect(handle_error)
+
+        # Start the process
+        self.process.start(args[0], args[1:])
+
+        if not self.process.waitForStarted():
+            QMessageBox.critical(self, "Error", "Failed to start process")
 
 
-def _parse_grid_values(value: str) -> tuple[int, int, int]:
-    cleaned = value.replace(",", " ").split()
-    if not cleaned:
-        raise ValueError("Grid size must contain 1 or 3 integers.")
-    try:
-        numbers = [int(part) for part in cleaned]
-    except ValueError as exc:
-        raise ValueError("Grid size entries must be integers.") from exc
-    if len(numbers) == 1:
-        return tuple([numbers[0]] * 3)
-    if len(numbers) == 3:
-        return tuple(numbers)
+def _parse_grid_values(value: list) -> tuple[int, int, int]:
+
+    if len(value) == 1:
+        return tuple([int(value[0])] * 3)
+
+    if len(value) == 3:
+        return tuple([int(item) for item in value])
+
     raise ValueError("Grid size must contain either 1 or 3 integers.")
 
 
@@ -211,14 +301,19 @@ def _build_cli_parser() -> argparse.ArgumentParser:
                         help="Path to the topology file (-s)")
     parser.add_argument("-x", "--trajectory", required=True,
                         help="Path to the trajectory file (-x)")
+    parser.add_argument("-g", "--grid", type=int, nargs='+', metavar='N',
+                        default=[SaxsDefaults.GRID_SIZE],
+                        help="Give 1 value (broadcast to 3) or 3 values.")
+
+    # parser.add_argument(
+    #     "-g",
+    #     "--grid",
+    #     default=SaxsDefaults.GRID_SIZE,
+    #     help=f"Grid size as nx[,ny,nz] (default: {SaxsDefaults.GRID_SIZE})",
+    # )
     parser.add_argument(
-        "-g",
-        "--grid",
-        default="128",
-        help="Grid size as nx[,ny,nz] (default: 128)",
-    )
-    parser.add_argument(
-        "-b", "--begin", type=int, default=0, help="Initial frame index (default: 0)",
+        "-b", "--begin", type=int, default=SaxsDefaults.INITIAL_FRAME,
+        help=f"Initial frame index (default: {SaxsDefaults.INITIAL_FRAME})",
     )
     parser.add_argument(
         "-e",
@@ -229,62 +324,62 @@ def _build_cli_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "-o",
         "--out",
-        default="",
-        help="Output file path (default: empty string)",
+        default=SaxsDefaults.OUTPUT,
+        help=f"Output file path (default: '{SaxsDefaults.OUTPUT}')",
     )
-    parser.add_argument("--dt", type=int, default=1,
-                        help="Frame interval (--dt, default: 1)")
-    parser.add_argument("--order", type=int, default=4,
-                        help="BSpline order (--order, default: 4)")
+    parser.add_argument("--dt", type=int, default=SaxsDefaults.DT,
+                        help=f"Frame interval (default: {SaxsDefaults.DT})")
+    parser.add_argument("--order", type=int, default=SaxsDefaults.ORDER,
+                        help=f"BSpline order (default: {SaxsDefaults.ORDER})")
     parser.add_argument(
         "--gridS",
         dest="grid_scaled",
         type=int,
-        default=0,
-        help="Scaled grid size (--gridS)",
+        default=SaxsDefaults.GRID_SCALED,
+        help=f"Scaled grid size (default: {SaxsDefaults.GRID_SCALED})",
     )
     parser.add_argument(
         "--Scale",
         dest="scale_factor",
         type=float,
-        default=2.0,
-        help="Grid scale factor (--Scale)",
+        default=SaxsDefaults.SCALE_FACTOR,
+        help=f"Grid scale factor (default: {SaxsDefaults.SCALE_FACTOR})",
     )
     parser.add_argument(
         "--bin",
         "--Dq",
         dest="bin_size",
         type=float,
-        default=0.01,
-        help="Histogram bin size (--bin/--Dq)",
+        default=SaxsDefaults.BIN_SIZE,
+        help=f"Histogram bin size (default: {SaxsDefaults.BIN_SIZE})",
     )
     parser.add_argument(
         "-q",
         "--qcut",
         dest="qcut",
         type=float,
-        default=1.5,
-        help="Reciprocal space cutoff (-q/--qcut)",
+        default=SaxsDefaults.QCUT,
+        help=f"Reciprocal space cutoff (default: {SaxsDefaults.QCUT})",
     )
     parser.add_argument(
         "--water",
         dest="water",
-        default="",
-        help="Model to use for the weighting function (--water)",
+        default=SaxsDefaults.WATER_MODEL,
+        help=f"Model to use for the weighting function (default: '{SaxsDefaults.WATER_MODEL}')",
     )
     parser.add_argument(
         "--na",
         dest="na",
         type=float,
-        default=0.0,
-        help="Sodium atoms (--na)",
+        default=SaxsDefaults.SODIUM,
+        help=f"Sodium concentration (default: {SaxsDefaults.SODIUM})",
     )
     parser.add_argument(
         "--cl",
         dest="cl",
         type=float,
-        default=0.0,
-        help="Chlorine atoms (--cl)",
+        default=SaxsDefaults.CHLORINE,
+        help=f"Chlorine concentration (default: {SaxsDefaults.CHLORINE})",
     )
     parser.add_argument(
         "--gui",
@@ -299,6 +394,15 @@ def _run_cli(namespace: argparse.Namespace) -> int:
         grid_values = _parse_grid_values(namespace.grid)
     except ValueError as exc:
         print(f"Error: {exc}", file=sys.stderr)
+        return 1
+
+    # Validate grid_scaled and scale_factor
+    if namespace.grid_scaled == 0 and namespace.scale_factor == 0.0:
+        print(
+            "Error: Both grid_scaled and scale_factor are zero. "
+            "Either set --gridS > 0 or --Scale > 0.",
+            file=sys.stderr
+        )
         return 1
 
     last_frame = namespace.end if namespace.end is not None else namespace.begin
