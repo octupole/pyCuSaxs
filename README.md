@@ -556,6 +556,13 @@ ImportError: No module named 'pycusaxs_cuda'
 - Ensure CUDA toolkit is installed and in PATH
 - Rebuild: `pip install --force-reinstall .`
 - Check CUDA version compatibility
+- On some systems, you may need to set `LD_LIBRARY_PATH` to include CUDA libraries:
+  ```bash
+  export LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH
+  # Or for custom CUDA installations:
+  export LD_LIBRARY_PATH=/path/to/cuda/lib64:$LD_LIBRARY_PATH
+  ```
+  Add this to your `~/.bashrc` or `~/.bash_profile` to make it permanent
 
 **2. GPU Memory Errors**
 ```
