@@ -29,7 +29,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
 )
 from PySide6.QtCore import Qt, QSettings
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QClipboard
 
 
 class RequiredParametersWidget(QWidget):
@@ -433,8 +433,22 @@ class SaxsParametersWindow(QWidget):
 
         layout.addWidget(buttons_container)
 
-        layout.addWidget(
+        # CLI preview section with copy button
+        cli_label_container = QWidget()
+        cli_label_layout = QHBoxLayout(cli_label_container)
+        cli_label_layout.setContentsMargins(0, 0, 0, 0)
+        cli_label_layout.addWidget(
             QLabel("Equivalent CLI Command (non-default options only)"))
+        cli_label_layout.addStretch()
+
+        self.copy_button = QPushButton("Copy")
+        self.copy_button.setSizePolicy(
+            QSizePolicy.Policy.Fixed, QSizePolicy.Policy.Fixed)
+        self.copy_button.clicked.connect(self._copy_cli_command)
+        self.copy_button.setToolTip("Copy CLI command to clipboard")
+        cli_label_layout.addWidget(self.copy_button)
+
+        layout.addWidget(cli_label_container)
         layout.addWidget(self.cli_preview)
 
         layout.addWidget(QLabel("Execution Output"))
@@ -452,6 +466,15 @@ class SaxsParametersWindow(QWidget):
 
     def show_advanced_dialog(self) -> None:
         self._advanced_dialog.show()
+
+    def _copy_cli_command(self) -> None:
+        """Copy the CLI command to clipboard."""
+        clipboard = QApplication.clipboard()
+        clipboard.setText(self.cli_preview.toPlainText())
+        # Optional: Show brief feedback
+        self.copy_button.setText("Copied!")
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(1500, lambda: self.copy_button.setText("Copy"))
 
     def build_cli_command(self, required_params: Dict[str, Any], advanced_params: Dict[str, Any]) -> str:
         """Build CLI command string showing only non-default parameters."""
