@@ -47,22 +47,43 @@
 - C++17-capable compiler (GCC 9+, Clang 10+, or MSVC 2019+)
 - Python 3.9 or newer
 - NVIDIA driver compatible with your CUDA version
+- fmt library (header-only mode supported)
 
-### Method 1: Standard Installation (Recommended)
+### Method 1: Conda/Mamba Installation (Recommended)
+
+Using conda/mamba ensures all C++ dependencies (fmt, CUDA libraries) are properly installed:
 
 ```bash
-# Create and activate virtual environment (optional but recommended)
+# Create conda environment with dependencies
+conda create -n pycusaxs python=3.11 cmake fmt pybind11 numpy
+conda activate pycusaxs
+
+# Install Python dependencies
+pip install PySide6 MDAnalysis networkx
+
+# Build and install pyCuSAXS
+pip install .
+```
+
+### Method 2: Standard Installation (pip + system packages)
+
+If you have fmt and CUDA installed system-wide:
+
+```bash
+# Create and activate virtual environment
 python -m venv venv
 source venv/bin/activate  # On Windows: venv\Scripts\activate
 
-# Install dependencies
+# Install Python dependencies
 pip install -r requirements.txt
 
 # Build and install pyCuSAXS
 pip install .
 ```
 
-### Method 2: Development Installation
+**Note:** If you encounter library loading errors, you may need to set `LD_LIBRARY_PATH` (see [Troubleshooting](#troubleshooting)).
+
+### Method 3: Development Installation
 
 ```bash
 # Install in editable mode for development
@@ -103,13 +124,23 @@ python -m pycusaxs.main \
 
 ### GUI Mode
 
+The GUI provides file browsers, parameter persistence, and real-time output display:
+
 ```bash
-# Launch graphical interface
+# Launch graphical interface (recommended)
 saxs-widget
 
-# or
-python -m pycusaxs.main gui
+# Alternative methods:
+python -m pycusaxs.main          # No arguments defaults to GUI
+python -m pycusaxs.main gui      # Explicit GUI mode
 ```
+
+**Features:**
+- File browsers for topology (.tpr), trajectory (.xtc), and output files
+- Remembers previously selected files across sessions
+- Real-time display of C++ computation output
+- Advanced parameters dialog for fine-tuning
+- Visual feedback with colored Execute (green) and Quit (red) buttons
 
 ---
 
@@ -184,27 +215,36 @@ python -m pycusaxs.main \
 
 ### Graphical User Interface
 
-The GUI provides an intuitive interface for configuring SAXS calculations:
+The GUI provides an intuitive interface for configuring SAXS calculations with enhanced usability features:
 
 1. **Launch GUI:**
    ```bash
    saxs-widget
    ```
 
-2. **Required Parameters Tab:**
-   - Select topology and trajectory files
-   - Set grid dimensions
-   - Define frame range
+2. **Main Window Features:**
+   - **File Selection:** Browse buttons for topology (.tpr), trajectory (.xtc/.trr/.dcd), and output files
+   - **Persistent Settings:** Previously selected file paths are automatically restored on launch
+   - **Grid Configuration:** Separate input fields for nx, ny, nz grid dimensions
+   - **Frame Range:** Initial and last frame selection with frame stride (dt)
 
 3. **Advanced Parameters Dialog:**
-   - Configure histogram binning
-   - Set solvent model parameters
-   - Adjust grid scaling and spline order
+   - Configure histogram binning (bin size, q cutoff)
+   - Set solvent model parameters (water model, ion counts)
+   - Adjust grid scaling (scale factor or explicit scaled grid size)
+   - Set B-spline interpolation order (1-8)
 
-4. **Execute and View Results:**
-   - Click "Run" to start computation
-   - View configuration summary and timing statistics
-   - Output file is saved to specified location
+4. **Execution and Output:**
+   - **Execute Button (Green):** Start SAXS computation
+   - **Real-time Output:** C++ backend output displayed live in monospace terminal view
+   - **Progress Tracking:** Frame-by-frame progress with timing information
+   - **Quit Button (Red):** Exit application
+   - Output files are saved to the specified location
+
+5. **Settings Persistence:**
+   - File paths are remembered across sessions (stored in `~/.config/pyCuSaxs/SaxsWidget.conf` on Linux)
+   - Last-used directories for file browsers
+   - Convenient for repeated analysis workflows
 
 ### Python API
 
