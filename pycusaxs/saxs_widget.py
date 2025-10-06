@@ -455,7 +455,7 @@ class SaxsParametersWindow(QWidget):
 
     def build_cli_command(self, required_params: Dict[str, Any], advanced_params: Dict[str, Any]) -> str:
         """Build CLI command string showing only non-default parameters."""
-        cmd_parts = ["python -m pycusaxs.main"]
+        cmd_parts = ["pycusaxs"]
 
         # Required parameters (always shown)
         cmd_parts.append(f"-s {required_params['topology']}")
