@@ -32,7 +32,8 @@ def build_output_paths(base: str, frame_range: range) -> List[Path]:
                 try:
                     base_path.relative_to(home)
                 except ValueError:
-                    raise ValueError(f"Path '{base}' is outside allowed directories")
+                    raise ValueError(
+                        f"Path '{base}' is outside allowed directories")
         except (OSError, RuntimeError) as e:
             raise ValueError(f"Invalid path '{base}': {e}")
 
@@ -51,7 +52,7 @@ def build_output_paths(base: str, frame_range: range) -> List[Path]:
     return [resolve_for_frame(frame) for frame in frame_range]
 
 
-def _invoke_cuda_backend(required_params: Dict[str, Any], 
+def _invoke_cuda_backend(required_params: Dict[str, Any],
                          advanced_params: Dict[str, Any], topology: Topology) -> List[str]:
     try:
         import pycusaxs_cuda  # type: ignore[import-not-found]
@@ -97,11 +98,14 @@ def _invoke_cuda_backend(required_params: Dict[str, Any],
     summary = result.get("summary", "cuda backend returned no summary")
     return [summary]
 
+
 def cuda_connect(required_params: Dict[str, Any], advanced_params: Dict[str, Any]) -> Iterable[str]:
     # Sanitize file paths
     try:
-        topology_path = Path(required_params["topology"]).expanduser().resolve()
-        trajectory_path = Path(required_params["trajectory"]).expanduser().resolve()
+        topology_path = Path(
+            required_params["topology"]).expanduser().resolve()
+        trajectory_path = Path(
+            required_params["trajectory"]).expanduser().resolve()
     except (OSError, RuntimeError) as e:
         raise ValueError(f"Invalid file path: {e}")
 
@@ -116,7 +120,8 @@ def cuda_connect(required_params: Dict[str, Any], advanced_params: Dict[str, Any
             try:
                 file_path.relative_to(home)
             except ValueError:
-                raise ValueError(f"{name.capitalize()} file path is outside allowed directories: {file_path}")
+                raise ValueError(
+                    f"{name.capitalize()} file path is outside allowed directories: {file_path}")
 
     begin = int(required_params["initial_frame"])
     end = int(required_params["last_frame"])
@@ -124,9 +129,11 @@ def cuda_connect(required_params: Dict[str, Any], advanced_params: Dict[str, Any
     if not topology_path.is_file():
         raise FileNotFoundError(f"Topology file not found: {topology_path}")
     if not trajectory_path.is_file():
-        raise FileNotFoundError(f"Trajectory file not found: {trajectory_path}")
+        raise FileNotFoundError(
+            f"Trajectory file not found: {trajectory_path}")
     if end < begin:
-        raise ValueError("Last frame (-e) must be greater than or equal to initial frame (-b).")
+        raise ValueError(
+            "Last frame (-e) must be greater than or equal to initial frame (-b).")
 
     topo = Topology(str(topology_path), str(trajectory_path))
     total_frames = topo.universe.trajectory.n_frames
@@ -146,7 +153,8 @@ def cuda_connect(required_params: Dict[str, Any], advanced_params: Dict[str, Any
     lines = []
     counts = topo.count_molecules()
     lines.append(
-        "Molecule counts — total: {0}, proteins: {1}, waters: {2}, ions: {3}, others: {4}".format(*counts)
+        "Molecule counts — total: {0}, proteins: {1}, waters: {2}, ions: {3}, others: {4}".format(
+            *counts)
     )
 
     lines.extend(_invoke_cuda_backend(required_params, advanced_params, topo))
@@ -174,9 +182,11 @@ class SaxsMainWindow(SaxsParametersWindow):
 
         # C++ backend now prints nice formatted configuration
         # Display any additional results in the GUI
-        message = "\n".join(results) if results else "SAXS calculation completed successfully."
+        message = "\n".join(
+            results) if results else "SAXS calculation completed successfully."
         self.output_view.setPlainText(message)
         print(message)
+
 
 def _parse_grid_values(value: str) -> tuple[int, int, int]:
     cleaned = value.replace(",", " ").split()
@@ -197,8 +207,10 @@ def _build_cli_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Generate PDB snapshots from a trajectory without launching the GUI.",
     )
-    parser.add_argument("-s", "--topology", required=True, help="Path to the topology file (-s)")
-    parser.add_argument("-x", "--trajectory", required=True, help="Path to the trajectory file (-x)")
+    parser.add_argument("-s", "--topology", required=True,
+                        help="Path to the topology file (-s)")
+    parser.add_argument("-x", "--trajectory", required=True,
+                        help="Path to the trajectory file (-x)")
     parser.add_argument(
         "-g",
         "--grid",
@@ -218,10 +230,12 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         "-o",
         "--out",
         default="",
-        help="Output PDB path or directory (default: trajectory_frame_XXXXX.pdb)",
+        help="Output file path (default: empty string)",
     )
-    parser.add_argument("--dt", type=float, default=0.0, help="Frame interval (--dt)")
-    parser.add_argument("--order", type=int, default=3, help="BSpline order (--order)")
+    parser.add_argument("--dt", type=int, default=1,
+                        help="Frame interval (--dt, default: 1)")
+    parser.add_argument("--order", type=int, default=4,
+                        help="BSpline order (--order, default: 4)")
     parser.add_argument(
         "--gridS",
         dest="grid_scaled",
@@ -233,7 +247,7 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         "--Scale",
         dest="scale_factor",
         type=float,
-        default=1.0,
+        default=2.0,
         help="Grid scale factor (--Scale)",
     )
     parser.add_argument(
@@ -241,7 +255,7 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         "--Dq",
         dest="bin_size",
         type=float,
-        default=0.0,
+        default=0.01,
         help="Histogram bin size (--bin/--Dq)",
     )
     parser.add_argument(
@@ -249,7 +263,7 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         "--qcut",
         dest="qcut",
         type=float,
-        default=0.0,
+        default=1.5,
         help="Reciprocal space cutoff (-q/--qcut)",
     )
     parser.add_argument(
