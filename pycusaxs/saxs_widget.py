@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
     QFileDialog,
     QSizePolicy,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QSettings
 from PySide6.QtGui import QPixmap
 
 
@@ -40,12 +40,17 @@ class RequiredParametersWidget(QWidget):
         layout = QFormLayout(self)
         layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
+        # Load settings
+        self.settings = QSettings("pyCuSaxs", "SaxsWidget")
+
         # Topology file with browse button
         topology_row = QWidget()
         topology_layout = QHBoxLayout(topology_row)
         topology_layout.setContentsMargins(0, 0, 0, 0)
         self.topology_edit = QLineEdit()
         self.topology_edit.setPlaceholderText("Path to topology file")
+        # Restore previous value
+        self.topology_edit.setText(self.settings.value("topology_file", ""))
         topology_browse_btn = QPushButton("Browse...")
         topology_browse_btn.clicked.connect(self._browse_topology)
         topology_layout.addWidget(self.topology_edit)
@@ -58,6 +63,8 @@ class RequiredParametersWidget(QWidget):
         trajectory_layout.setContentsMargins(0, 0, 0, 0)
         self.trajectory_edit = QLineEdit()
         self.trajectory_edit.setPlaceholderText("Path to trajectory file")
+        # Restore previous value
+        self.trajectory_edit.setText(self.settings.value("trajectory_file", ""))
         trajectory_browse_btn = QPushButton("Browse...")
         trajectory_browse_btn.clicked.connect(self._browse_trajectory)
         trajectory_layout.addWidget(self.trajectory_edit)
@@ -114,25 +121,37 @@ class RequiredParametersWidget(QWidget):
 
     def _browse_topology(self) -> None:
         """Open file dialog to select topology file."""
+        # Start from previously used directory
+        start_dir = self.settings.value("topology_dir", "")
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Topology File",
-            "",
+            start_dir,
             "Topology Files (*.tpr *.pdb *.gro);;All Files (*)"
         )
         if file_path:
             self.topology_edit.setText(file_path)
+            # Save file path and directory for next time
+            self.settings.setValue("topology_file", file_path)
+            import os
+            self.settings.setValue("topology_dir", os.path.dirname(file_path))
 
     def _browse_trajectory(self) -> None:
         """Open file dialog to select trajectory file."""
+        # Start from previously used directory
+        start_dir = self.settings.value("trajectory_dir", "")
         file_path, _ = QFileDialog.getOpenFileName(
             self,
             "Select Trajectory File",
-            "",
+            start_dir,
             "Trajectory Files (*.xtc *.trr *.dcd);;All Files (*)"
         )
         if file_path:
             self.trajectory_edit.setText(file_path)
+            # Save file path and directory for next time
+            self.settings.setValue("trajectory_file", file_path)
+            import os
+            self.settings.setValue("trajectory_dir", os.path.dirname(file_path))
 
     def parameters(self) -> Dict[str, Any]:
         """Return the required parameters as a dictionary."""
@@ -156,13 +175,18 @@ class AdvancedParametersWidget(QWidget):
         layout = QFormLayout(self)
         layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
+        # Load settings
+        self.settings = QSettings("pyCuSaxs", "SaxsWidget")
+
         # Output file with browse button
         output_row = QWidget()
         output_layout = QHBoxLayout(output_row)
         output_layout.setContentsMargins(0, 0, 0, 0)
         self.out_edit = QLineEdit()
         self.out_edit.setPlaceholderText("Output file path")
-        self.out_edit.setText(SaxsDefaults.OUTPUT)
+        # Restore previous value, or use default
+        saved_output = self.settings.value("output_file", "")
+        self.out_edit.setText(saved_output if saved_output else SaxsDefaults.OUTPUT)
         output_browse_btn = QPushButton("Browse...")
         output_browse_btn.clicked.connect(self._browse_output)
         output_layout.addWidget(self.out_edit)
@@ -238,14 +262,20 @@ class AdvancedParametersWidget(QWidget):
 
     def _browse_output(self) -> None:
         """Open file dialog to select output file path."""
+        # Start from previously used directory
+        start_dir = self.settings.value("output_dir", "")
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Select Output File",
-            "",
+            start_dir,
             "Data Files (*.dat *.txt);;All Files (*)"
         )
         if file_path:
             self.out_edit.setText(file_path)
+            # Save file path and directory for next time
+            self.settings.setValue("output_file", file_path)
+            import os
+            self.settings.setValue("output_dir", os.path.dirname(file_path))
 
     def parameters(self) -> Dict[str, Any]:
         """Return advanced parameters as a dictionary."""
