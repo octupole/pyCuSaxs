@@ -100,9 +100,14 @@ cmake --build build -j$(nproc)
 # Check if CUDA backend is available
 python -c "import pycusaxs_cuda; print('CUDA backend loaded successfully')"
 
-# Launch GUI
+# Check if package is properly installed
+python -c "import pycusaxs; print('pycusaxs package loaded successfully')"
+
+# Launch GUI (saxs-widget command is available after pip install)
 saxs-widget
 ```
+
+**Note:** If you haven't run `pip install .` yet, use `python -m pycusaxs.main` to launch the GUI directly from the source directory.
 
 ---
 
@@ -127,10 +132,10 @@ python -m pycusaxs.main \
 The GUI provides file browsers, parameter persistence, and real-time output display:
 
 ```bash
-# Launch graphical interface (recommended)
+# After installation (pip install .):
 saxs-widget
 
-# Alternative methods:
+# Running from source directory without installation:
 python -m pycusaxs.main          # No arguments defaults to GUI
 python -m pycusaxs.main gui      # Explicit GUI mode
 ```
