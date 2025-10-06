@@ -1,0 +1,68 @@
+# cudaSAXS CMake configuration file
+#
+# This file provides imported targets for the cudaSAXS libraries.
+# After finding this package, you can use the following targets:
+#   cudaSAXS::cudaSAXS - Main executable target
+#   cudaSAXS::utils    - Utilities library
+#   cudaSAXS::system   - System library  
+#   cudaSAXS::saxs     - SAXS computation library
+#   cudaSAXS::exec     - Execution library
+
+@PACKAGE_INIT@
+
+# Version information
+set(cudaSAXS_VERSION "@PROJECT_VERSION@")
+set(cudaSAXS_VERSION_MAJOR "@PROJECT_VERSION_MAJOR@")
+set(cudaSAXS_VERSION_MINOR "@PROJECT_VERSION_MINOR@")
+set(cudaSAXS_VERSION_PATCH "@PROJECT_VERSION_PATCH@")
+
+# Find required dependencies
+include(CMakeFindDependencyMacro)
+
+# CUDA is required
+find_dependency(CUDAToolkit 11.0)
+if(NOT TARGET CUDA::cudart)
+    message(FATAL_ERROR "cudaSAXS requires CUDA runtime")
+endif()
+
+# Python and pybind11 are required
+find_dependency(Python3 3.7 COMPONENTS Interpreter Development)
+find_dependency(pybind11 2.6)
+
+# OpenMP is required
+find_dependency(OpenMP)
+
+# fmt library (if not built as subdirectory)
+if(NOT TARGET fmt::fmt)
+    find_dependency(fmt 9.0)
+endif()
+
+# Check if all required components are available
+set(_cudaSAXS_required_components utils system saxs exec)
+foreach(_comp ${_cudaSAXS_required_components})
+    if(NOT TARGET cudaSAXS::${_comp})
+        set(cudaSAXS_${_comp}_FOUND FALSE)
+    else()
+        set(cudaSAXS_${_comp}_FOUND TRUE)
+    endif()
+endforeach()
+
+# Include the targets file
+include("${CMAKE_CURRENT_LIST_DIR}/cudaSAXSTargets.cmake")
+
+# Check for requested components
+if(cudaSAXS_FIND_COMPONENTS)
+    foreach(_comp ${cudaSAXS_FIND_COMPONENTS})
+        if(NOT cudaSAXS_${_comp}_FOUND)
+            if(cudaSAXS_FIND_REQUIRED_${_comp})
+                message(FATAL_ERROR "cudaSAXS component ${_comp} not found")
+            else()
+                message(STATUS "cudaSAXS component ${_comp} not found")
+            endif()
+        else()
+            message(STATUS "cudaSAXS component ${_comp} found")
+        endif()
+    endforeach()
+endif()
+
+check_required_components(cudaSAXS)
