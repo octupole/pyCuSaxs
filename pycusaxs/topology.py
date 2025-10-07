@@ -127,6 +127,62 @@ class Topology:
 
         return num_molecules, num_proteins, num_waters, num_ions, num_others
 
+    def detect_water_model(self) -> str:
+        """
+        Detect the water model used in the simulation.
+
+        Returns:
+            Water model name (e.g., 'tip3p', 'tip4p', 'spc', 'spce') or empty string if no water found
+        """
+        if not self.water_molecules:
+            return ""
+
+        # Get first water molecule to check residue name
+        water_atoms = self.universe.atoms[list(self.water_molecules[0])]
+        resname = water_atoms.residues[0].resname.upper()
+
+        # Map GROMACS residue names to water model names
+        water_model_map = {
+            'TIP3': 'tip3p',
+            'TIP4': 'tip4p',
+            'SOL': 'spc',      # GROMACS default name for SPC/SPC-E
+            'WAT': 'tip3p',    # Generic water, assume TIP3P
+        }
+
+        return water_model_map.get(resname, resname.lower())
+
+    def count_ions(self) -> Dict[str, int]:
+        """
+        Count individual ion types in the system.
+
+        Returns:
+            Dictionary with ion counts: {'Na': count, 'Cl': count, 'K': count, 'Ca': count, 'Mg': count}
+        """
+        ion_counts = {'Na': 0, 'Cl': 0, 'K': 0, 'Ca': 0, 'Mg': 0}
+
+        if not self.ion_molecules:
+            return ion_counts
+
+        # Get all ion atoms
+        ion_indices = set().union(*self.ion_molecules)
+        ion_atoms = self.universe.atoms[list(ion_indices)]
+
+        # Count by residue name
+        for residue in ion_atoms.residues:
+            resname = residue.resname.upper()
+            if resname in ['NA', 'SOD']:  # Sodium
+                ion_counts['Na'] += 1
+            elif resname in ['CL', 'CLA']:  # Chloride
+                ion_counts['Cl'] += 1
+            elif resname == 'K':  # Potassium
+                ion_counts['K'] += 1
+            elif resname in ['CA', 'CAL']:  # Calcium
+                ion_counts['Ca'] += 1
+            elif resname == 'MG':  # Magnesium
+                ion_counts['Mg'] += 1
+
+        return ion_counts
+
     def generate_molecule_dict(self) -> Dict[str, Dict[str, List[int]]]:
         """
         Generate dictionary with detailed molecule information.
@@ -349,6 +405,19 @@ def main():
     print(f"  Ions: {num_ions}")
     if num_others:
         print(f"  Others: {num_others}")
+
+    # Detect water model
+    water_model = top.detect_water_model()
+    if water_model:
+        print(f"\nWater Model: {water_model}")
+
+    # Count individual ion types
+    ion_counts = top.count_ions()
+    if any(ion_counts.values()):
+        print(f"\nIon Composition:")
+        for ion_type, count in ion_counts.items():
+            if count > 0:
+                print(f"  {ion_type}: {count}")
 
     # Get atom indices by element
     atom_index = top.get_atom_index()

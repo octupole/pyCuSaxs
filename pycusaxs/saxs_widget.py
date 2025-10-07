@@ -239,6 +239,22 @@ class AdvancedParametersWidget(QWidget):
         self.help_checkbox = QCheckBox("Show CLI help instead of running")
         layout.addRow("Help flag (-h)", self.help_checkbox)
 
+        # Solvent parameters section with auto-detect button
+        solvent_header = QLabel("Solvent Parameters")
+        solvent_header_font = solvent_header.font()
+        solvent_header_font.setBold(True)
+        layout.addRow(solvent_header)
+
+        detect_button_row = QWidget()
+        detect_button_layout = QHBoxLayout(detect_button_row)
+        detect_button_layout.setContentsMargins(0, 0, 0, 0)
+        self.detect_solvent_button = QPushButton("Auto-detect from Topology")
+        self.detect_solvent_button.clicked.connect(self._detect_solvent_params)
+        self.detect_solvent_button.setToolTip("Automatically detect water model and ion counts from topology file")
+        detect_button_layout.addWidget(self.detect_solvent_button)
+        detect_button_layout.addStretch()
+        layout.addRow("", detect_button_row)
+
         self.water_model_edit = QLineEdit()
         self.water_model_edit.setPlaceholderText("Water model identifier")
         self.water_model_edit.setText(SaxsDefaults.WATER_MODEL)
@@ -276,6 +292,76 @@ class AdvancedParametersWidget(QWidget):
             self.settings.setValue("output_file", file_path)
             import os
             self.settings.setValue("output_dir", os.path.dirname(file_path))
+
+    def _detect_solvent_params(self) -> None:
+        """Auto-detect water model and ion counts from topology file."""
+        # Get the topology file path from parent window
+        parent = self.parent()
+        while parent and not hasattr(parent, 'required_widget'):
+            parent = parent.parent()
+
+        if not parent:
+            QMessageBox.warning(self, "Error", "Cannot access topology file path")
+            return
+
+        topology_path = parent.required_widget.topology_edit.text()
+        trajectory_path = parent.required_widget.trajectory_edit.text()
+
+        if not topology_path or not trajectory_path:
+            QMessageBox.warning(
+                self, "Missing Files",
+                "Please select both topology and trajectory files first."
+            )
+            return
+
+        try:
+            from .topology import Topology
+            QMessageBox.information(
+                self, "Analyzing",
+                "Analyzing topology file. This may take a moment..."
+            )
+
+            # Load topology
+            topo = Topology(topology_path, trajectory_path)
+
+            # Detect water model
+            water_model = topo.detect_water_model()
+            if water_model:
+                self.water_model_edit.setText(water_model)
+
+            # Count ions
+            ion_counts = topo.count_ions()
+            if ion_counts['Na'] > 0:
+                self.sodium_spin.setValue(ion_counts['Na'])
+            if ion_counts['Cl'] > 0:
+                self.chlorine_spin.setValue(ion_counts['Cl'])
+
+            # Show summary
+            msg_parts = []
+            if water_model:
+                msg_parts.append(f"Water model: {water_model}")
+            if ion_counts['Na'] > 0 or ion_counts['Cl'] > 0:
+                msg_parts.append(f"Na+: {ion_counts['Na']}, Cl-: {ion_counts['Cl']}")
+            if ion_counts['K'] > 0 or ion_counts['Ca'] > 0 or ion_counts['Mg'] > 0:
+                other_ions = f"Other ions - K+: {ion_counts['K']}, Ca2+: {ion_counts['Ca']}, Mg2+: {ion_counts['Mg']}"
+                msg_parts.append(other_ions)
+
+            if msg_parts:
+                QMessageBox.information(
+                    self, "Detection Complete",
+                    "Detected:\n" + "\n".join(msg_parts)
+                )
+            else:
+                QMessageBox.information(
+                    self, "Detection Complete",
+                    "No water or ions detected in topology."
+                )
+
+        except Exception as e:
+            QMessageBox.critical(
+                self, "Error",
+                f"Failed to analyze topology:\n{str(e)}"
+            )
 
     def parameters(self) -> Dict[str, Any]:
         """Return advanced parameters as a dictionary."""
