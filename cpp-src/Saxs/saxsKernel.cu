@@ -217,7 +217,7 @@ void saxsKernel::runPKernel(int frame, float Time, std::vector<std::vector<float
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 }
-std::vector<std::vector<double>> saxsKernel::getSaxs()
+std::vector<std::vector<double>> saxsKernel::getSaxs(double &Vol)
 {
     std::vector<std::vector<double>> saxs;
     h_histogram = d_histogram;
@@ -227,7 +227,7 @@ std::vector<std::vector<double>> saxsKernel::getSaxs()
     {
         if (h_nhist[o] != 0.0f)
         {
-            vector<double> val = {o * this->bin_size, h_histogram[o] / h_nhist[o]};
+            vector<double> val = {o * this->bin_size, h_histogram[o] / h_nhist[o] / Vol};
             saxs.push_back(val);
         }
     }
@@ -278,18 +278,101 @@ void saxsKernel::createMemory()
     d_moduleY_ptr = thrust::raw_pointer_cast(d_moduleY.data());
     d_moduleZ_ptr = thrust::raw_pointer_cast(d_moduleZ.data());
 
-    d_grid.resize(nx * ny * nz);
-    d_gridSup.resize(nnx * nny * nnz);
-    d_gridSupC.resize(nnx * nny * nnpz);
-    d_gridSupAcc.resize(nnx * nny * nnpz);
-    d_Iq.resize(nnx * nny * nnpz);
+    // Calculate total memory required (in bytes) - must be outside try block for catch handlers
+    size_t grid_size = static_cast<size_t>(nx) * ny * nz;
+    size_t gridSup_size = static_cast<size_t>(nnx) * nny * nnz;
+    size_t gridSupC_size = static_cast<size_t>(nnx) * nny * nnpz;
+
+    size_t total_bytes = grid_size * sizeof(float) +              // d_grid
+                         gridSup_size * sizeof(float) +           // d_gridSup
+                         gridSupC_size * sizeof(cuFloatComplex) + // d_gridSupC
+                         gridSupC_size * sizeof(cuFloatComplex) + // d_gridSupAcc
+                         gridSupC_size * sizeof(cuFloatComplex);  // d_Iq
+
+    float total_gb = total_bytes / (1024.0f * 1024.0f * 1024.0f);
+
+    // Query GPU memory information
+    size_t free_mem = 0, total_mem = 0;
+    cudaMemGetInfo(&free_mem, &total_mem);
+    float free_gb = free_mem / (1024.0f * 1024.0f * 1024.0f);
+    float gpu_total_gb = total_mem / (1024.0f * 1024.0f * 1024.0f);
+
+    // Print memory info before attempting allocation
+    fmt::print("\n");
+    fmt::print("═══════════════════════════════════════════════════\n");
+    fmt::print("  GPU Memory Allocation\n");
+    fmt::print("  Grid sizes: {}x{}x{} (cell), {}x{}x{} (supercell)\n", nx, ny, nz, nnx, nny, nnz);
+    fmt::print("  GPU memory available: {:.2f} GB / {:.2f} GB (free/total)\n", free_gb, gpu_total_gb);
+    fmt::print("  Memory required: {:.2f} GB\n", total_gb);
+    fmt::print("═══════════════════════════════════════════════════\n");
+    std::cout.flush();
+
+    // Check if we have enough memory BEFORE attempting allocation
+    if (total_bytes > free_mem)
+    {
+        std::string error_msg = fmt::format(
+            "\n"
+            "ERROR: Insufficient GPU memory!\n"
+            "  Required: {:.2f} GB\n"
+            "  Available: {:.2f} GB (free) / {:.2f} GB (total)\n"
+            "  Requested grid: {}x{}x{} (cell), {}x{}x{} (supercell)\n"
+            "  Try reducing the grid size or scale parameter.\n",
+            total_gb, free_gb, gpu_total_gb, nx, ny, nz, nnx, nny, nnz);
+
+        std::cerr << error_msg << std::endl;
+        throw std::runtime_error("bamby!!");
+    }
+
+    // Allocate device memory with error handling
+    try
+    {
+
+        d_grid.resize(grid_size);
+        d_gridSup.resize(gridSup_size);
+        d_gridSupC.resize(gridSupC_size);
+        d_gridSupAcc.resize(gridSupC_size);
+        d_Iq.resize(gridSupC_size);
+
+        fmt::print("  ✓ GPU memory allocated successfully\n\n");
+        std::cout.flush();
+    }
+    catch (const std::bad_alloc &e)
+    {
+        std::string error_msg = fmt::format(
+            "\n"
+            "ERROR: GPU memory allocation failed!\n"
+            "  Required: {:.2f} GB\n"
+            "  Available: {:.2f} GB (free) / {:.2f} GB (total)\n"
+            "  Requested grid: {}x{}x{} (cell), {}x{}x{} (supercell)\n"
+            "  Try reducing the grid size or scale parameter.\n"
+            "  Original error: {}",
+            total_gb, free_gb, gpu_total_gb, nx, ny, nz, nnx, nny, nnz, e.what());
+
+        std::cerr << error_msg << std::endl;
+        throw std::runtime_error(error_msg);
+    }
+    catch (const thrust::system_error &e)
+    {
+        std::string error_msg = fmt::format(
+            "\n"
+            "ERROR: GPU memory allocation failed!\n"
+            "  Required: {:.2f} GB\n"
+            "  Available: {:.2f} GB (free) / {:.2f} GB (total)\n"
+            "  Requested grid: {}x{}x{} (cell), {}x{}x{} (supercell)\n"
+            "  Error code: {}\n"
+            "  Error message: {}\n"
+            "  Try reducing the grid size or scale parameter.",
+            total_gb, free_gb, gpu_total_gb, nx, ny, nz, nnx, nny, nnz, e.code().value(), e.what());
+
+        std::cerr << error_msg << std::endl;
+        throw std::runtime_error(error_msg);
+    }
 
     d_grid_ptr = thrust::raw_pointer_cast(d_grid.data());
     d_gridSup_ptr = thrust::raw_pointer_cast(d_gridSup.data());
     d_gridSupC_ptr = thrust::raw_pointer_cast(d_gridSupC.data());
     d_gridSupAcc_ptr = thrust::raw_pointer_cast(d_gridSupAcc.data());
     d_Iq_ptr = thrust::raw_pointer_cast(d_Iq.data());
-    // Do bspmod
 }
 /**
  * Generates a vector of multiples of 2, 3, 5, and 7 up to a given limit.
@@ -309,47 +392,53 @@ std::vector<long long> saxsKernel::generateMultiples(long long limit)
     for (int a = 0; (1LL << a) <= limit; ++a)
     {
         long long pow2 = 1LL << a; // 2^a using bit shift
-        for (int b = 0; ; ++b)
+        for (int b = 0;; ++b)
         {
             long long pow3 = 1LL;
             for (int i = 0; i < b; ++i)
             {
                 // Check for overflow before multiplication
-                if (pow3 > limit / 3) goto next_a;
+                if (pow3 > limit / 3)
+                    goto next_a;
                 pow3 *= 3;
             }
             long long pow23 = pow2 * pow3;
-            if (pow23 > limit) break;
+            if (pow23 > limit)
+                break;
 
-            for (int c = 0; ; ++c)
+            for (int c = 0;; ++c)
             {
                 long long pow5 = 1LL;
                 for (int i = 0; i < c; ++i)
                 {
-                    if (pow5 > limit / 5) goto next_b;
+                    if (pow5 > limit / 5)
+                        goto next_b;
                     pow5 *= 5;
                 }
                 long long pow235 = pow23 * pow5;
-                if (pow235 > limit) break;
+                if (pow235 > limit)
+                    break;
 
-                for (int d = 0; ; ++d)
+                for (int d = 0;; ++d)
                 {
                     long long pow7 = 1LL;
                     for (int i = 0; i < d; ++i)
                     {
-                        if (pow7 > limit / 7) goto next_c;
+                        if (pow7 > limit / 7)
+                            goto next_c;
                         pow7 *= 7;
                     }
                     long long multiple = pow235 * pow7;
-                    if (multiple > limit) break;
+                    if (multiple > limit)
+                        break;
 
                     multiples.push_back(multiple);
                 }
-                next_c:;
+            next_c:;
             }
-            next_b:;
+        next_b:;
         }
-        next_a:;
+    next_a:;
     }
     std::sort(multiples.begin(), multiples.end());
     multiples.erase(std::unique(multiples.begin(), multiples.end()), multiples.end());
@@ -466,21 +555,32 @@ void saxsKernel::writeBanner()
     }
     else
     {
+        // Build ion information string
+        std::string ion_info;
+        for (const auto &ion_pair : Options::IonCounts)
+        {
+            if (ion_pair.second > 0)
+            {
+                ion_info += fmt::format("* {:<10} {:>4d}                                   *\n",
+                                        ion_pair.first + " ions", ion_pair.second);
+            }
+        }
+
         banner = fmt::format(
             "*************************************************\n"
-            "* {:^40}      *\n"
+            "* {:^45} *\n"
             "* {:<19} {:>4} * {:>4} * {:>4}        *\n"
             "* {:<19} {:>4} * {:>4} * {:>4}        *\n"
             "* {:<10} {:>4}      {:<10} {:>4}          *\n"
             "* {:<10} {:>4.3f}     {:<10}  {:>3.1f}          *\n"
-            "* {:<10}           {:<14}           *\n"
-            "* {:<10} {:>4d}      {:<10} {:>4d}          *\n"
+            "* {:<19} {:<25} *\n"
+            "{}"
             "*************************************************\n\n",
             "Running CuSAXS", "Cell Grid", Options::nx, Options::ny, Options::nz,
             "Supercell Grid", Options::nnx, Options::nny, Options::nnz, "Order",
             Options::order, "Sigma", Options::sigma, "Bin Size", Options::Dq, "Q Cutoff ",
-            Options::Qcut, "Padding ", padding,
-            "Na ions", Options::Sodium, "Cl Ions", Options::Chlorine);
+            Options::Qcut, "Water Model", Options::Wmodel,
+            ion_info);
     }
     std::cout << banner;
 }

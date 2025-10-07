@@ -14,16 +14,16 @@ private:
     static const std::map<std::string, float> water_models;
 
     float cell_volume; // in Å³
-    int added_sodium;
-    int added_chlorine;
+    std::map<std::string, int> added_ions; // Map of ion type to count
     std::string water_model;
     int grid_x, grid_y, grid_z;
 
     float calculateWaterMolecules() const;
 
 public:
+    // Constructor with ion map supporting all ion types (Na, Cl, K, Ca, Mg, etc.)
     AtomCounter(float lx, float ly, float lz,
-                int sodium, int chlorine, const std::string &model,
+                const std::map<std::string, int> &ions, const std::string &model,
                 int gx, int gy, int gz);
 
     std::map<std::string, float> calculateAtomCounts() const;

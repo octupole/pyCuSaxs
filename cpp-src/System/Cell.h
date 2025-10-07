@@ -56,6 +56,9 @@ public:
     static const std::vector<std::vector<float>> &getCO() { return co; };
     static const std::vector<std::vector<float>> &getOC() { return oc; };
 
+    // Compute volume from the co matrix
+    static float getVolume();
+
 private:
     static std::vector<std::vector<float>> co;
     static std::vector<std::vector<float>> oc;

@@ -25,7 +25,7 @@ public:
     static int nx, ny, nz;
     static int nnx, nny, nnz;
     static std::string Wmodel;
-    static int Sodium, Chlorine;
+    static std::map<std::string, int> IonCounts;  // Map of ion type to count (e.g., {"Na": 150, "Cl": 150, "K": 10})
     static padding myPadding;
     static std::map<std::string, float> myWmodel;
     static std::string outFile;

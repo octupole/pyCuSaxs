@@ -24,7 +24,7 @@ class SaxsDefaults:
     GRID_SCALED: int = 0  # Scaled grid size (0 = use scale_factor instead)
     SCALE_FACTOR: float = 2.5  # Grid scale factor (ignored if grid_scaled > 0)
     BIN_SIZE: float = 0.01  # Histogram bin size
-    QCUT: float = 1.5  # Reciprocal space cutoff
+    QCUT: float = 2.0  # Reciprocal space cutoff
     WATER_MODEL: str = ""  # Water model identifier
     SODIUM: float = 0.0  # Sodium concentration
     CHLORINE: float = 0.0  # Chlorine concentration

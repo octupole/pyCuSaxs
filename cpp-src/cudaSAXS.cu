@@ -77,8 +77,9 @@ CudaSaxsResult run_cuda_saxs(py::object Topol, const CudaSaxsConfig &config)
     Options::Dq = config.bin_size;
     Options::Qcut = config.qcut;
     Options::Wmodel = config.water_model;
-    Options::Sodium = config.sodium_atoms;
-    Options::Chlorine = config.chlorine_atoms;
+    // Initialize ion counts from config (keeping Na and Cl for now, will extend later)
+    Options::IonCounts["Na"] = config.sodium_atoms;
+    Options::IonCounts["Cl"] = config.chlorine_atoms;
     Options::outFile = config.output_path.empty() ? Options::outFile : config.output_path;
     if (!config.simulation_ensemble.empty())
     {
@@ -157,31 +158,57 @@ CudaSaxsResult run_cuda_saxs(py::object Topol, const CudaSaxsConfig &config)
         Options::Dq,
         Options::Qcut);
 
+    // Build solvent information with all ions
     std::string solvent_info;
     if (!Options::Wmodel.empty())
     {
+        std::string ion_list;
+        for (const auto &ion_pair : Options::IonCounts)
+        {
+            if (ion_pair.second > 0)
+            {
+                // Add appropriate charge symbols
+                std::string ion_symbol = ion_pair.first;
+                if (ion_symbol == "Na" || ion_symbol == "K") ion_symbol += "⁺";
+                else if (ion_symbol == "Cl") ion_symbol += "⁻";
+                else if (ion_symbol == "Ca" || ion_symbol == "Mg") ion_symbol += "²⁺";
+
+                ion_list += fmt::format("  {} atoms     : {}\n", ion_symbol, ion_pair.second);
+            }
+        }
+
         solvent_info = fmt::format(
             "\n{}\n"
             "  Water Model   : {}\n"
-            "  Na⁺ atoms     : {}\n"
-            "  Cl⁻ atoms     : {}\n"
+            "{}"
             "  Padding Mode  : {}\n",
             fmt::format(fmt::emphasis::bold, "Solvent Model"),
             Options::Wmodel,
-            Options::Sodium,
-            Options::Chlorine,
+            ion_list,
             Options::myPadding == padding::given ? "explicit" : "average");
     }
     else
     {
+        std::string ion_list;
+        for (const auto &ion_pair : Options::IonCounts)
+        {
+            if (ion_pair.second > 0)
+            {
+                std::string ion_symbol = ion_pair.first;
+                if (ion_symbol == "Na" || ion_symbol == "K") ion_symbol += "⁺";
+                else if (ion_symbol == "Cl") ion_symbol += "⁻";
+                else if (ion_symbol == "Ca" || ion_symbol == "Mg") ion_symbol += "²⁺";
+
+                ion_list += fmt::format("  {} atoms     : {}\n", ion_symbol, ion_pair.second);
+            }
+        }
+
         solvent_info = fmt::format(
             "\n{}\n"
-            "  Na⁺ atoms     : {}\n"
-            "  Cl⁻ atoms     : {}\n"
+            "{}"
             "  Padding Mode  : {}\n",
             fmt::format(fmt::emphasis::bold, "Solvent Model"),
-            Options::Sodium,
-            Options::Chlorine,
+            ion_list,
             "average");
     }
 

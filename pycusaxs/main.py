@@ -386,10 +386,47 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Launch the GUI instead of running in CLI mode.",
     )
+    parser.add_argument(
+        "--info",
+        action="store_true",
+        help="Print detailed system information and exit (does not run SAXS calculation).",
+    )
     return parser
 
 
 def _run_cli(namespace: argparse.Namespace) -> int:
+    # Handle --info flag: print system information and exit
+    if namespace.info:
+        try:
+            from pathlib import Path
+            topology_path = Path(namespace.topology).expanduser().resolve()
+            trajectory_path = Path(namespace.trajectory).expanduser().resolve()
+
+            if not topology_path.is_file():
+                print(f"Error: Topology file not found: {topology_path}", file=sys.stderr)
+                return 1
+            if not trajectory_path.is_file():
+                print(f"Error: Trajectory file not found: {trajectory_path}", file=sys.stderr)
+                return 1
+
+            topo = Topology(str(topology_path), str(trajectory_path))
+            topo.print_system_summary(verbose=True)
+
+            # Also print the raw dictionary for database schema design
+            print("\n" + "="*60)
+            print("RAW DATA (for database design)")
+            print("="*60)
+            info = topo.get_system_info()
+            import json
+            print(json.dumps(info, indent=2, default=str))
+
+            return 0
+        except Exception as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            return 1
+
     try:
         grid_values = _parse_grid_values(namespace.grid)
     except ValueError as exc:

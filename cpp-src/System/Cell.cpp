@@ -124,3 +124,18 @@ void Cell::calculateMatrices(std::vector<std::vector<float>> &cell_parameters)
 
     oc[2][2] = 1.0 / co[2][2];
 }
+
+/**
+ * Computes the volume from the co matrix using the determinant.
+ * Volume = det(co) = co[0][0] * (co[1][1] * co[2][2] - co[1][2] * co[2][1])
+ *                  - co[0][1] * (co[1][0] * co[2][2] - co[1][2] * co[2][0])
+ *                  + co[0][2] * (co[1][0] * co[2][1] - co[1][1] * co[2][0])
+ *
+ * @return Volume in Angstrom^3
+ */
+float Cell::getVolume()
+{
+    return co[0][0] * (co[1][1] * co[2][2] - co[1][2] * co[2][1])
+         - co[0][1] * (co[1][0] * co[2][2] - co[1][2] * co[2][0])
+         + co[0][2] * (co[1][0] * co[2][1] - co[1][1] * co[2][0]);
+}

@@ -129,27 +129,81 @@ class Topology:
 
     def detect_water_model(self) -> str:
         """
-        Detect the water model used in the simulation.
+        Detect the water model used in the simulation by analyzing charges and geometry.
+
+        Distinguishes between:
+        - SPC vs SPC/E (by charge: SPC has ±0.41e, SPC/E has ±0.4238e)
+        - TIP3P vs TIP4P (by atom count: TIP4P has virtual site/extra atom)
 
         Returns:
-            Water model name (e.g., 'tip3p', 'tip4p', 'spc', 'spce') or empty string if no water found
+            Water model name in uppercase (e.g., 'TIP3P', 'TIP4P', 'SPC', 'SPCE')
+            or empty string if no water found. Returns uppercase to match C++ code expectations.
         """
         if not self.water_molecules:
             return ""
 
-        # Get first water molecule to check residue name
+        # Get first water molecule to check
         water_atoms = self.universe.atoms[list(self.water_molecules[0])]
         resname = water_atoms.residues[0].resname.upper()
 
-        # Map GROMACS residue names to water model names
-        water_model_map = {
-            'TIP3': 'tip3p',
-            'TIP4': 'tip4p',
-            'SOL': 'spc',      # GROMACS default name for SPC/SPC-E
-            'WAT': 'tip3p',    # Generic water, assume TIP3P
-        }
+        # Quick mapping for explicitly named models
+        if resname == 'TIP3':
+            return 'TIP3P'
+        elif resname == 'TIP4':
+            return 'TIP4P'
 
-        return water_model_map.get(resname, resname.lower())
+        # For SOL and WAT, need to check charges/geometry to distinguish models
+        if resname in ['SOL', 'WAT']:
+            # Get charges if available
+            try:
+                if hasattr(water_atoms, 'charges'):
+                    charges = water_atoms.charges
+                    # Get oxygen charge (usually the first atom)
+                    o_atoms = water_atoms.select_atoms('element O')
+                    if len(o_atoms) > 0:
+                        o_charge = abs(o_atoms[0].charge)
+
+                        # SPC: O charge ≈ -0.82e, H charge ≈ +0.41e
+                        # SPC/E: O charge ≈ -0.8476e, H charge ≈ +0.4238e
+                        # TIP3P: O charge ≈ -0.834e, H charge ≈ +0.417e
+                        # TIP4P: O charge ≈ -1.04e (or virtual site charge)
+
+                        if o_charge > 0.845:  # |O charge| > 0.845
+                            # Could be TIP4P or check number of atoms
+                            if len(water_atoms) > 3:  # TIP4P has virtual site
+                                return 'TIP4P'
+                            else:
+                                return 'SPCE'  # SPC/E has -0.8476
+                        elif o_charge > 0.83:  # 0.83 < |O charge| < 0.845
+                            return 'TIP3P'  # TIP3P has -0.834
+                        elif o_charge > 0.825:  # 0.825 < |O charge| < 0.83
+                            return 'SPC'  # SPC has -0.82
+                        else:
+                            # Check H charge to distinguish
+                            h_atoms = water_atoms.select_atoms('element H')
+                            if len(h_atoms) > 0:
+                                h_charge = abs(h_atoms[0].charge)
+                                if h_charge > 0.42:  # SPC/E: +0.4238
+                                    return 'SPCE'
+                                elif h_charge > 0.415:  # TIP3P: +0.417
+                                    return 'TIP3P'
+                                else:  # SPC: +0.41
+                                    return 'SPC'
+            except (AttributeError, IndexError):
+                pass
+
+            # Fallback: check number of atoms in water molecule
+            if len(water_atoms) > 3:
+                return 'TIP4P'  # TIP4P has 4 atoms (O, H, H, virtual site)
+
+            # Default fallback based on residue name
+            if resname == 'SOL':
+                return 'SPC'  # GROMACS default
+            else:
+                return 'TIP3P'  # Generic water default
+
+        # Unknown water model, return as-is
+        return resname
 
     def count_ions(self) -> Dict[str, int]:
         """
@@ -227,6 +281,206 @@ class Topology:
                 atom_index[atom_type] = []
             atom_index[atom_type].append(atom.index)
         return atom_index
+
+    def get_system_info(self) -> Dict:
+        """
+        Extract comprehensive system information for database storage.
+
+        Returns:
+            Dictionary containing detailed system information including:
+            - Topology file information
+            - Atom counts by element and residue
+            - Molecule counts and compositions
+            - Water model information
+            - Ion composition
+            - Box dimensions and volume
+            - Trajectory information
+            - Force field information (if available)
+        """
+        info = {}
+
+        # Basic file information
+        info['topology_file'] = self.tpr_file
+        info['n_atoms'] = self.universe.atoms.n_atoms
+        info['n_residues'] = self.universe.atoms.n_residues
+        info['n_segments'] = self.universe.atoms.n_segments
+        info['n_frames'] = self.n_frames
+
+        # Trajectory information
+        if self.universe.trajectory:
+            info['trajectory_length_frames'] = len(self.universe.trajectory)
+            info['dt'] = getattr(self.universe.trajectory, 'dt', None)
+            info['total_time'] = getattr(self.universe.trajectory, 'totaltime', None)
+
+        # Atom counts by element
+        element_counts = {}
+        for atom in self.universe.atoms:
+            elem = atom.element
+            element_counts[elem] = element_counts.get(elem, 0) + 1
+        info['element_counts'] = element_counts
+
+        # Molecule type counts
+        info['n_proteins'] = len(self.protein_molecules)
+        info['n_water_molecules'] = len(self.water_molecules)
+        info['n_ion_molecules'] = len(self.ion_molecules)
+        info['n_other_molecules'] = len(self.other_molecules)
+
+        # Detailed water information
+        if self.water_molecules:
+            water_residues = self.universe.atoms[list(self.water_molecules[0])].residues
+            if len(water_residues) > 0:
+                info['water_resname'] = water_residues[0].resname
+            info['detected_water_model'] = self.detect_water_model()
+
+            # Count total water atoms
+            total_water_atoms = sum(len(mol) for mol in self.water_molecules)
+            info['n_water_atoms'] = total_water_atoms
+
+        # Detailed ion information
+        ion_counts = self.count_ions()
+        info['ion_counts'] = {k: v for k, v in ion_counts.items() if v > 0}
+
+        # Residue composition
+        residue_counts = {}
+        for residue in self.universe.residues:
+            resname = residue.resname
+            residue_counts[resname] = residue_counts.get(resname, 0) + 1
+        info['residue_counts'] = residue_counts
+
+        # Box information (from first frame)
+        self.read_frame(0)
+        box = self.get_box()
+        if box is not None and len(box) == 3:
+            # Convert to Angstroms and extract diagonal elements
+            info['box_x'] = box[0][0]
+            info['box_y'] = box[1][1]
+            info['box_z'] = box[2][2]
+            # Calculate volume (for orthogonal box, this is simple product)
+            # For triclinic, need determinant but approximate here
+            info['box_volume'] = box[0][0] * box[1][1] * box[2][2]
+
+            # Store full box matrix for triclinic cells
+            info['box_matrix'] = [[float(box[i][j]) for j in range(3)] for i in range(3)]
+
+        # Protein-specific information
+        if self.protein_molecules:
+            protein_atoms = self.universe.select_atoms('protein')
+            info['n_protein_atoms'] = len(protein_atoms)
+            info['n_protein_residues'] = len(protein_atoms.residues)
+
+            # Protein residue composition
+            protein_residues = {}
+            for residue in protein_atoms.residues:
+                resname = residue.resname
+                protein_residues[resname] = protein_residues.get(resname, 0) + 1
+            info['protein_residue_counts'] = protein_residues
+
+            # Protein sequence (if available)
+            try:
+                sequence = ''.join([residue.resname for residue in protein_atoms.residues])
+                info['protein_sequence'] = sequence[:100]  # First 100 residues
+            except:
+                pass
+
+        # Charge information (if available)
+        try:
+            if hasattr(self.universe.atoms, 'charges'):
+                total_charge = np.sum(self.universe.atoms.charges)
+                info['total_charge'] = float(total_charge)
+        except:
+            pass
+
+        # Mass information
+        try:
+            if hasattr(self.universe.atoms, 'masses'):
+                total_mass = np.sum(self.universe.atoms.masses)
+                info['total_mass'] = float(total_mass)
+        except:
+            pass
+
+        # Density calculation (if we have mass and volume)
+        if 'total_mass' in info and 'box_volume' in info and info['box_volume'] > 0:
+            # Convert: mass in amu, volume in Angstrom^3
+            # Density = mass(amu) / volume(A^3) * 1.66054 g/cm^3
+            info['density_g_cm3'] = info['total_mass'] / info['box_volume'] * 1.66054
+
+        return info
+
+    def print_system_summary(self, verbose=True):
+        """
+        Print a formatted summary of the system information.
+
+        Args:
+            verbose: If True, print detailed information
+        """
+        info = self.get_system_info()
+
+        print("\n" + "="*60)
+        print("SYSTEM INFORMATION SUMMARY")
+        print("="*60)
+
+        print(f"\nTopology File: {info.get('topology_file', 'N/A')}")
+        print(f"Total Atoms: {info.get('n_atoms', 0)}")
+        print(f"Total Residues: {info.get('n_residues', 0)}")
+        print(f"Total Frames: {info.get('n_frames', 0)}")
+
+        if 'dt' in info and info['dt']:
+            print(f"Time Step: {info['dt']:.3f} ps")
+        if 'total_time' in info and info['total_time']:
+            print(f"Total Simulation Time: {info['total_time']:.2f} ps")
+
+        print(f"\n--- Molecular Composition ---")
+        print(f"Proteins: {info.get('n_proteins', 0)}")
+        print(f"Water Molecules: {info.get('n_water_molecules', 0)}")
+        print(f"Ion Molecules: {info.get('n_ion_molecules', 0)}")
+        print(f"Other Molecules: {info.get('n_other_molecules', 0)}")
+
+        if 'detected_water_model' in info and info['detected_water_model']:
+            print(f"\n--- Water Information ---")
+            print(f"Detected Water Model: {info['detected_water_model']}")
+            print(f"Water Residue Name: {info.get('water_resname', 'N/A')}")
+            print(f"Total Water Atoms: {info.get('n_water_atoms', 0)}")
+
+        if 'ion_counts' in info and info['ion_counts']:
+            print(f"\n--- Ion Composition ---")
+            for ion, count in info['ion_counts'].items():
+                charge_symbol = ""
+                if ion in ['Na', 'K']:
+                    charge_symbol = "⁺"
+                elif ion == 'Cl':
+                    charge_symbol = "⁻"
+                elif ion in ['Ca', 'Mg']:
+                    charge_symbol = "²⁺"
+                print(f"{ion}{charge_symbol}: {count}")
+
+        if 'box_x' in info:
+            print(f"\n--- Box Dimensions ---")
+            print(f"X: {info['box_x']:.3f} Å")
+            print(f"Y: {info['box_y']:.3f} Å")
+            print(f"Z: {info['box_z']:.3f} Å")
+            print(f"Volume: {info['box_volume']:.2f} Å³")
+
+        if 'density_g_cm3' in info:
+            print(f"System Density: {info['density_g_cm3']:.4f} g/cm³")
+
+        if 'total_charge' in info:
+            print(f"Total System Charge: {info['total_charge']:.3f} e")
+
+        if verbose and 'element_counts' in info:
+            print(f"\n--- Element Counts ---")
+            for elem, count in sorted(info['element_counts'].items()):
+                print(f"{elem}: {count}")
+
+        if verbose and 'protein_residue_counts' in info:
+            print(f"\n--- Protein Residue Composition ---")
+            total = sum(info['protein_residue_counts'].values())
+            for resname, count in sorted(info['protein_residue_counts'].items(),
+                                        key=lambda x: x[1], reverse=True)[:10]:
+                print(f"{resname}: {count}")
+            if len(info['protein_residue_counts']) > 10:
+                print(f"... and {len(info['protein_residue_counts']) - 10} more")
+
+        print("\n" + "="*60 + "\n")
 
     def myUniverse(self) -> mda.Universe:
         """

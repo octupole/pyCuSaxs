@@ -21,29 +21,29 @@ const float AtomCounter::AVOGADRO = 6.022e23f;
 const float AtomCounter::WATER_MOLAR_MASS = 18.015f; // g/mol
 
 const std::map<std::string, float> AtomCounter::water_models = {
-    {"SPCE", 0.998f}, // g/cm³
-    {"TIP3P", 0.982f} // g/cm³
+    {"SPCE", 0.998f},  // g/cm³ - SPC/E water model
+    {"SPC", 0.998f},   // g/cm³ - SPC water model (same density as SPC/E)
+    {"TIP3P", 0.982f}, // g/cm³ - TIP3P water model
+    {"TIP4P", 0.999f}  // g/cm³ - TIP4P water model
 };
 
 /**
- * Constructs an AtomCounter object with the given simulation cell dimensions,
- * number of added sodium and chlorine atoms, water model, and grid dimensions.
+ * Constructs an AtomCounter object with a map of ion types and counts.
+ * Supports all ion types: Na, Cl, K, Ca, Mg, and any others.
  *
- * @param lx The length of the simulation cell in the x-direction.
- * @param ly The length of the simulation cell in the y-direction.
- * @param lz The length of the simulation cell in the z-direction.
- * @param sodium The number of added sodium atoms.
- * @param chlorine The number of added chlorine atoms.
- * @param model The water model to use (e.g. "SPCE", "TIP3P").
+ * @param lx The length of the simulation cell in the x-direction (Angstroms).
+ * @param ly The length of the simulation cell in the y-direction (Angstroms).
+ * @param lz The length of the simulation cell in the z-direction (Angstroms).
+ * @param ions Map of ion element symbols to counts (e.g., {"Na": 150, "Cl": 150, "K": 10, "Ca": 5}).
+ * @param model The water model to use (e.g. "SPCE", "TIP3P", "TIP4P", "SPC").
  * @param gx The number of grid points in the x-direction.
  * @param gy The number of grid points in the y-direction.
  * @param gz The number of grid points in the z-direction.
  */
 AtomCounter::AtomCounter(float lx, float ly, float lz,
-                         int sodium, int chlorine, const std::string &model,
+                         const std::map<std::string, int> &ions, const std::string &model,
                          int gx, int gy, int gz)
-    : cell_volume(lx * ly * lz),
-      added_sodium(sodium), added_chlorine(chlorine), water_model(model),
+    : cell_volume(lx * ly * lz), added_ions(ions), water_model(model),
       grid_x(gx), grid_y(gy), grid_z(gz) {}
 
 /**
@@ -61,23 +61,25 @@ float AtomCounter::calculateWaterMolecules() const
 }
 
 /**
- * Calculates the counts of different atom types (O, H, Na, Cl) in the simulation cell.
+ * Calculates the counts of different atom types (O, H, and all ions) in the simulation cell.
  *
  * This method first checks if the specified water model is valid, and if not, uses the
  * SPC/E model as the default. It then calculates the number of water molecules in the
  * simulation cell using the `calculateWaterMolecules()` method, and computes the counts
- * of oxygen, hydrogen, sodium, and chlorine atoms based on the number of water molecules
- * and the added sodium and chlorine atoms. The atom counts are returned as a map, where
- * the keys are the atom types and the values are the counts.
+ * of oxygen, hydrogen, and all ion atoms based on the number of water molecules
+ * and the added ions. The atom counts are returned as a map, where
+ * the keys are the atom types and the values are the counts per grid point.
  *
- * @return A map containing the counts of different atom types in the simulation cell.
+ * Supports all common ions: Na, Cl, K, Ca, Mg, and any others present in added_ions.
+ *
+ * @return A map containing the counts of different atom types per grid point in the simulation cell.
  */
 std::map<std::string, float> AtomCounter::calculateAtomCounts() const
 {
     std::string used_model = water_model;
     if (water_models.find(water_model) == water_models.end())
     {
-        std::cout << "Invalid water model. Using SPC/E as default." << std::endl;
+        std::cout << "Invalid water model '" << water_model << "'. Using SPCE as default." << std::endl;
         used_model = "SPCE";
     }
 
@@ -85,10 +87,18 @@ std::map<std::string, float> AtomCounter::calculateAtomCounts() const
     int total_grid_points = grid_x * grid_y * grid_z;
 
     std::map<std::string, float> atom_counts;
+
+    // Water atoms
     atom_counts["O"] = water_molecules / total_grid_points;
     atom_counts["H"] = 2.0f * water_molecules / total_grid_points;
-    atom_counts["Na"] = static_cast<float>(added_sodium) / total_grid_points;
-    atom_counts["Cl"] = static_cast<float>(added_chlorine) / total_grid_points;
+
+    // All ions from the map
+    for (const auto &ion_pair : added_ions)
+    {
+        const std::string &ion_type = ion_pair.first;
+        int ion_count = ion_pair.second;
+        atom_counts[ion_type] = static_cast<float>(ion_count) / total_grid_points;
+    }
 
     return atom_counts;
 }
