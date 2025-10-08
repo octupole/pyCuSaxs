@@ -57,11 +57,19 @@
          <lastmod>2025-10-08</lastmod>
     </url>
     <url>
+         <loc>https://octupole.github.io/pyCuSaxs/user-guide/database/</loc>
+         <lastmod>2025-10-08</lastmod>
+    </url>
+    <url>
          <loc>https://octupole.github.io/pyCuSaxs/user-guide/gui/</loc>
          <lastmod>2025-10-08</lastmod>
     </url>
     <url>
          <loc>https://octupole.github.io/pyCuSaxs/user-guide/python-api/</loc>
+         <lastmod>2025-10-08</lastmod>
+    </url>
+    <url>
+         <loc>https://octupole.github.io/pyCuSaxs/user-guide/solvent-subtraction/</loc>
          <lastmod>2025-10-08</lastmod>
     </url>
 </urlset>
