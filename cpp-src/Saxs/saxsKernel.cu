@@ -217,7 +217,7 @@ void saxsKernel::runPKernel(int frame, float Time, std::vector<std::vector<float
     cudaEventDestroy(start);
     cudaEventDestroy(stop);
 }
-std::vector<std::vector<double>> saxsKernel::getSaxs(double &Vol)
+std::vector<std::vector<double>> saxsKernel::getSaxs()
 {
     std::vector<std::vector<double>> saxs;
     h_histogram = d_histogram;
@@ -227,7 +227,7 @@ std::vector<std::vector<double>> saxsKernel::getSaxs(double &Vol)
     {
         if (h_nhist[o] != 0.0f)
         {
-            vector<double> val = {o * this->bin_size, h_histogram[o] / h_nhist[o] / Vol};
+            vector<double> val = {o * this->bin_size, h_histogram[o] / h_nhist[o]};
             saxs.push_back(val);
         }
     }

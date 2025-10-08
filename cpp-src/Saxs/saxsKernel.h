@@ -48,7 +48,7 @@ public:
     void scaledCell();
     void zeroIq();
     void getHistogram(std::vector<std::vector<float>> &);
-    std::vector<std::vector<double>> getSaxs(double &);
+    std::vector<std::vector<double>> getSaxs();
     void createMemory();
     void resetHistogramParameters(std::vector<std::vector<float>> &);
     void writeBanner();

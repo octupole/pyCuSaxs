@@ -179,6 +179,7 @@ void RunSaxs::Run(py::object Topol, int beg, int end, int dt)
         auto oc = Cell::getOC();
 
         // Setup padding if needed
+        Options::myPadding = padding::avg;
         if (Options::myPadding == padding::given)
         {
             // Use AtomCounter to calculate bulk solution densities for padding
@@ -338,7 +339,7 @@ void RunSaxs::Run(py::object Topol, int beg, int end, int dt)
         }
         volume_avg /= static_cast<double>(nvol);
         std::cout << " Vol " << volume_avg << std::endl;
-        myhisto = myKernel.getSaxs(volume_avg);
+        myhisto = myKernel.getSaxs();
 
         // Write results
         std::ofstream myfile;
@@ -351,7 +352,7 @@ void RunSaxs::Run(py::object Topol, int beg, int end, int dt)
         for (auto data : myhisto)
         {
             myfile << std::fixed << std::setw(10) << std::setprecision(5) << data[0];
-            myfile << std::scientific << std::setprecision(5) << std::setw(12) << data[1] << std::endl;
+            myfile << std::scientific << std::setprecision(5) << std::setw(12) << data[1] / volume_avg << std::endl;
 
             if (!myfile.good())
             {

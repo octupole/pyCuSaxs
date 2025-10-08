@@ -68,7 +68,8 @@ class Topology:
         self.ts = None  # Current timestep (set by read_frame)
         self.__build_graph()
         self.__classify_molecules()
-        print(f"Initialized Topology: {self.n_atoms} atoms, {self.n_frames} frames")
+        print(
+            f"Initialized Topology: {self.n_atoms} atoms, {self.n_frames} frames")
 
     def __build_graph(self):
         """
@@ -310,7 +311,8 @@ class Topology:
         if self.universe.trajectory:
             info['trajectory_length_frames'] = len(self.universe.trajectory)
             info['dt'] = getattr(self.universe.trajectory, 'dt', None)
-            info['total_time'] = getattr(self.universe.trajectory, 'totaltime', None)
+            info['total_time'] = getattr(
+                self.universe.trajectory, 'totaltime', None)
 
         # Atom counts by element
         element_counts = {}
@@ -327,7 +329,8 @@ class Topology:
 
         # Detailed water information
         if self.water_molecules:
-            water_residues = self.universe.atoms[list(self.water_molecules[0])].residues
+            water_residues = self.universe.atoms[list(
+                self.water_molecules[0])].residues
             if len(water_residues) > 0:
                 info['water_resname'] = water_residues[0].resname
             info['detected_water_model'] = self.detect_water_model()
@@ -390,10 +393,12 @@ class Topology:
             info['box_z'] = float(box[2][2]) * 10.0
             # Calculate volume (for orthogonal box, this is simple product)
             # Volume: nm³ → Ų (multiply by 10³ = 1000)
-            info['box_volume'] = float(box[0][0] * box[1][1] * box[2][2]) * 1000.0
+            info['box_volume'] = float(
+                box[0][0] * box[1][1] * box[2][2]) * 1000.0
 
             # Store full box matrix for triclinic cells (in Angstroms)
-            info['box_matrix'] = [[float(box[i][j]) * 10.0 for j in range(3)] for i in range(3)]
+            info['box_matrix'] = [
+                [float(box[i][j]) * 10.0 for j in range(3)] for i in range(3)]
 
         # Protein-specific information
         if self.protein_molecules:
@@ -405,12 +410,14 @@ class Topology:
             protein_residues = {}
             for residue in protein_atoms.residues:
                 resname = residue.resname
-                protein_residues[resname] = protein_residues.get(resname, 0) + 1
+                protein_residues[resname] = protein_residues.get(
+                    resname, 0) + 1
             info['protein_residue_counts'] = protein_residues
 
             # Protein sequence (if available)
             try:
-                sequence = ''.join([residue.resname for residue in protein_atoms.residues])
+                sequence = ''.join(
+                    [residue.resname for residue in protein_atoms.residues])
                 info['protein_sequence'] = sequence[:100]  # First 100 residues
             except:
                 pass
@@ -435,7 +442,8 @@ class Topology:
         if 'total_mass' in info and 'box_volume' in info and info['box_volume'] > 0:
             # Convert: mass in amu, volume in Angstrom^3
             # Density = mass(amu) / volume(A^3) * 1.66054 g/cm^3
-            info['density_g_cm3'] = info['total_mass'] / info['box_volume'] * 1.66054
+            info['density_g_cm3'] = info['total_mass'] / \
+                info['box_volume'] * 1.66054
 
         return info
 
@@ -508,10 +516,11 @@ class Topology:
             print(f"\n--- Protein Residue Composition ---")
             total = sum(info['protein_residue_counts'].values())
             for resname, count in sorted(info['protein_residue_counts'].items(),
-                                        key=lambda x: x[1], reverse=True)[:10]:
+                                         key=lambda x: x[1], reverse=True)[:10]:
                 print(f"{resname}: {count}")
             if len(info['protein_residue_counts']) > 10:
-                print(f"... and {len(info['protein_residue_counts']) - 10} more")
+                print(
+                    f"... and {len(info['protein_residue_counts']) - 10} more")
 
         print("\n" + "="*60 + "\n")
 
@@ -565,7 +574,7 @@ class Topology:
         """
         if self.ts is None:
             raise RuntimeError("Call read_frame() before get_box()")
-        return self.ts.triclinic_dimensions / NM_TO_ANGSTROM
+        return self.ts.triclinic_dimensions
 
     def get_step(self) -> int:
         """
@@ -607,7 +616,7 @@ class Topology:
         """
         if self.ts is None:
             raise RuntimeError("Call read_frame() before get_coordinates()")
-        return self.ts.positions / NM_TO_ANGSTROM
+        return self.ts.positions
 
     def iter_frames_stream(self, start: int, stop: int, step: int = 1) -> Iterator[Dict]:
         """
@@ -638,8 +647,8 @@ class Topology:
             yield {
                 'frame': ts.frame,
                 'time': ts.time,
-                'positions': self.universe.atoms.positions / NM_TO_ANGSTROM,
-                'box': ts.triclinic_dimensions / NM_TO_ANGSTROM
+                'positions': self.universe.atoms.positions,
+                'box': ts.triclinic_dimensions
             }
 
     @property
@@ -717,7 +726,8 @@ def main():
     top.read_frame(args.frame)
     box = top.get_box()
     coords = top.get_coordinates()
-    print(f"  Box dimensions (Å): {box[0, 0]:.2f} × {box[1, 1]:.2f} × {box[2, 2]:.2f}")
+    print(
+        f"  Box dimensions (Å): {box[0, 0]:.2f} × {box[1, 1]:.2f} × {box[2, 2]:.2f}")
     print(f"  Time: {top.get_time():.2f} ps")
     print(f"  Number of atoms: {len(coords)}")
 

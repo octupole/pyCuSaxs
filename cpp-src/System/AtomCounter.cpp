@@ -55,7 +55,7 @@ AtomCounter::AtomCounter(float lx, float ly, float lz,
  */
 float AtomCounter::calculateWaterMolecules() const
 {
-    float volume_cm3 = 1000.0f * cell_volume * 1e-24f;            // convert Å³ to cm³
+    float volume_cm3 = cell_volume * 1e-24f;                      // convert Å³ to cm³
     float water_mass = water_models.at(water_model) * volume_cm3; // mass of water in g
     return (water_mass / WATER_MOLAR_MASS) * AVOGADRO;
 }

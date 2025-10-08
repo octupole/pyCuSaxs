@@ -112,7 +112,7 @@ void Cell::calculateMatrices(std::vector<std::vector<float>> &cell_parameters)
 {
     for (auto o{0}; o < DIM; o++)
         for (auto p{0}; p < DIM; p++)
-            co[o][p] = 10.0f * cell_parameters[o][p];
+            co[o][p] = cell_parameters[o][p];
 
     // Calculate the inverse elements
     oc[0][0] = 1.0 / co[0][0];
@@ -135,7 +135,5 @@ void Cell::calculateMatrices(std::vector<std::vector<float>> &cell_parameters)
  */
 float Cell::getVolume()
 {
-    return co[0][0] * (co[1][1] * co[2][2] - co[1][2] * co[2][1])
-         - co[0][1] * (co[1][0] * co[2][2] - co[1][2] * co[2][0])
-         + co[0][2] * (co[1][0] * co[2][1] - co[1][1] * co[2][0]);
+    return co[0][0] * (co[1][1] * co[2][2] - co[1][2] * co[2][1]) - co[0][1] * (co[1][0] * co[2][2] - co[1][2] * co[2][0]) + co[0][2] * (co[1][0] * co[2][1] - co[1][1] * co[2][0]);
 }
