@@ -391,6 +391,23 @@ def _build_cli_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Print detailed system information and exit (does not run SAXS calculation).",
     )
+    default_db = str(SaxsDefaults.get_user_database_path())
+    parser.add_argument(
+        "--save-db",
+        dest="save_db",
+        type=str,
+        default=None,
+        nargs='?',
+        const='',  # Empty string means use default
+        metavar="DB_FILE",
+        help=f"Save SAXS profile to SQLite database (default: {default_db})",
+    )
+    parser.add_argument(
+        "--save-reference",
+        dest="save_reference",
+        action="store_true",
+        help="Save to reference solvent database (requires write permission, for building reference library only)",
+    )
     return parser
 
 
@@ -470,6 +487,105 @@ def _run_cli(namespace: argparse.Namespace) -> int:
     except Exception as exc:  # pragma: no cover - CLI feedback
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+
+    # If --save-db or --save-reference was specified, save the profile to database
+    if namespace.save_db is not None or namespace.save_reference:
+        try:
+            from .saxs_database import SaxsDatabase
+            from pathlib import Path
+
+            # Determine which database to use
+            if namespace.save_reference:
+                # Save to reference database (read-only, shipped with package)
+                db_path = str(SaxsDefaults.get_reference_database_path())
+                print(f"Saving to REFERENCE database: {db_path}")
+            elif namespace.save_db:
+                # Custom path specified
+                db_path = namespace.save_db
+            else:
+                # Use default user database
+                db_path = str(SaxsDefaults.get_user_database_path())
+
+            # Read the output SAXS profile
+            output_file = advanced_params.get("out", "saxs.dat")
+            if not Path(output_file).exists():
+                print(f"Warning: Output file {output_file} not found, cannot save to database", file=sys.stderr)
+                return 0
+
+            # Parse the SAXS profile from output file
+            profile_data = []
+            with open(output_file, 'r') as f:
+                for line in f:
+                    line = line.strip()
+                    if line and not line.startswith('#'):
+                        parts = line.split()
+                        if len(parts) >= 2:
+                            q = float(parts[0])
+                            iq = float(parts[1])
+                            profile_data.append((q, iq))
+
+            # Get system information from topology
+            topology_path = Path(required_params["topology"]).expanduser().resolve()
+            trajectory_path = Path(required_params["trajectory"]).expanduser().resolve()
+            topo = Topology(str(topology_path), str(trajectory_path))
+            info = topo.get_system_info()
+
+            # Calculate simulation time analyzed
+            n_frames = required_params["last_frame"] - required_params["initial_frame"] + 1
+            dt = advanced_params.get("dt", 1)
+            actual_frames = (n_frames + dt - 1) // dt
+            sim_time_ps = actual_frames * info.get('dt', 0.0) if info.get('dt') else 0.0
+
+            # Get supercell scale
+            scale_raw = advanced_params.get("grid_scaled", advanced_params.get("scale_factor", 0.0))
+            if isinstance(scale_raw, list) and len(scale_raw) > 0:
+                supercell_scale = float(scale_raw[0]) / float(grid_values[0])
+            elif isinstance(scale_raw, (int, float)) and scale_raw > 0:
+                supercell_scale = float(scale_raw)
+            else:
+                supercell_scale = advanced_params.get("scale_factor", 1.0)
+
+            # Calculate supercell volume
+            supercell_volume = info['box_volume'] * (supercell_scale ** 3)
+
+            # Save to database
+            with SaxsDatabase(db_path) as db:
+                profile_id = db.save_profile(
+                    profile_data=profile_data,
+                    water_model=info.get('detected_water_model', advanced_params.get('water_model', '')),
+                    n_water_molecules=info.get('n_water_molecules', 0),
+                    ion_counts=info.get('ion_counts', {}),
+                    box_x=info.get('box_x', 0.0),
+                    box_y=info.get('box_y', 0.0),
+                    box_z=info.get('box_z', 0.0),
+                    box_volume=info.get('box_volume', 0.0),
+                    supercell_scale=supercell_scale,
+                    supercell_volume=supercell_volume,
+                    simulation_time_ps=sim_time_ps,
+                    n_frames_analyzed=actual_frames,
+                    grid_size=grid_values,
+                    frame_stride=dt,
+                    bin_size=advanced_params.get('bin_size'),
+                    qcut=advanced_params.get('qcut'),
+                    order=advanced_params.get('order'),
+                    density_g_cm3=info.get('density_g_cm3'),
+                    n_atoms=info.get('n_atoms'),
+                    notes=f"Generated from {topology_path.name}"
+                )
+
+                print(f"\n{'='*60}")
+                print(f"SAXS profile saved to database: {db_path}")
+                print(f"Profile ID: {profile_id}")
+                print(f"Water Model: {info.get('detected_water_model', 'N/A')}")
+                print(f"Supercell Scale: {supercell_scale:.4f}")
+                print(f"Simulation Time: {sim_time_ps:.2f} ps")
+                print(f"{'='*60}\n")
+
+        except Exception as exc:
+            print(f"Error saving to database: {exc}", file=sys.stderr)
+            import traceback
+            traceback.print_exc()
+            return 1
 
     # Summary is now printed by the C++ backend with nice formatting
     # for line in results:

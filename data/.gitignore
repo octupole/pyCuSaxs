@@ -1,0 +1,6 @@
+# Keep the database in version control
+!saxs_profiles.db
+
+# Ignore temporary files
+*.tmp
+*.log

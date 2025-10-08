@@ -7,6 +7,7 @@ ensuring consistency between CLI and GUI interfaces.
 
 from __future__ import annotations
 from typing import Dict, Any
+from pathlib import Path
 
 
 class SaxsDefaults:
@@ -28,6 +29,32 @@ class SaxsDefaults:
     WATER_MODEL: str = ""  # Water model identifier
     SODIUM: float = 0.0  # Sodium concentration
     CHLORINE: float = 0.0  # Chlorine concentration
+
+    # Database defaults
+    @staticmethod
+    def get_reference_database_path() -> Path:
+        """Get path to read-only reference solvent database (shipped with package)."""
+        # Get the package directory
+        package_dir = Path(__file__).parent.parent
+        data_dir = package_dir / "data"
+        return data_dir / "reference_solvents.db"
+
+    @staticmethod
+    def get_user_database_path() -> Path:
+        """Get path to user's read-write database (in user's data directory)."""
+        # Use user's home directory for writable database
+        from pathlib import Path
+        import os
+
+        # Try XDG_DATA_HOME first (Linux standard), fall back to ~/.local/share
+        xdg_data_home = os.environ.get('XDG_DATA_HOME')
+        if xdg_data_home:
+            data_dir = Path(xdg_data_home) / "pycusaxs"
+        else:
+            data_dir = Path.home() / ".local" / "share" / "pycusaxs"
+
+        data_dir.mkdir(parents=True, exist_ok=True)
+        return data_dir / "user_profiles.db"
 
     # UI-specific defaults
     GRID_SIZE_RANGE_MIN: int = 1
