@@ -53,6 +53,9 @@ class SaxsDatabase:
                 -- Ion composition (stored as JSON for flexibility)
                 ion_counts TEXT NOT NULL,
 
+                -- Other molecules: proteins, ligands, etc. (stored as JSON)
+                other_molecules TEXT,
+
                 -- Box dimensions
                 box_x REAL NOT NULL,
                 box_y REAL NOT NULL,
@@ -72,7 +75,7 @@ class SaxsDatabase:
                 grid_size TEXT NOT NULL,
                 bin_size REAL,
                 qcut REAL,
-                order INTEGER,
+                spline_order INTEGER,
 
                 -- System density
                 density_g_cm3 REAL,
@@ -143,6 +146,7 @@ class SaxsDatabase:
                     order: int = None,
                     density_g_cm3: float = None,
                     n_atoms: int = None,
+                    other_molecules: Dict[str, int] = None,
                     notes: str = None) -> int:
         """
         Save SAXS profile to database.
@@ -165,6 +169,7 @@ class SaxsDatabase:
             order: B-spline order
             density_g_cm3: System density
             n_atoms: Total atoms
+            other_molecules: Dictionary of other molecule residue names and counts (proteins, ligands, etc.)
             notes: Optional notes
 
         Returns:
@@ -178,21 +183,22 @@ class SaxsDatabase:
 
         # Convert data to JSON strings
         ion_counts_json = json.dumps(ion_counts)
+        other_molecules_json = json.dumps(other_molecules if other_molecules else {})
         grid_size_json = json.dumps(grid_size)
         profile_data_json = json.dumps(profile_data)
 
         try:
             cursor.execute("""
                 INSERT INTO saxs_profiles (
-                    profile_hash, water_model, n_water_molecules, ion_counts,
+                    profile_hash, water_model, n_water_molecules, ion_counts, other_molecules,
                     box_x, box_y, box_z, box_volume,
                     supercell_scale, supercell_volume,
                     simulation_time_ps, n_frames_analyzed, frame_stride,
-                    grid_size, bin_size, qcut, order,
+                    grid_size, bin_size, qcut, spline_order,
                     density_g_cm3, n_atoms, notes, profile_data
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                profile_hash, water_model, n_water_molecules, ion_counts_json,
+                profile_hash, water_model, n_water_molecules, ion_counts_json, other_molecules_json,
                 box_x, box_y, box_z, box_volume,
                 supercell_scale, supercell_volume,
                 simulation_time_ps, n_frames_analyzed, frame_stride,
@@ -273,6 +279,7 @@ class SaxsDatabase:
 
         # Parse JSON fields
         result['ion_counts'] = json.loads(result['ion_counts'])
+        result['other_molecules'] = json.loads(result['other_molecules']) if result.get('other_molecules') else {}
         result['grid_size'] = json.loads(result['grid_size'])
         result['profile_data'] = json.loads(result['profile_data'])
 

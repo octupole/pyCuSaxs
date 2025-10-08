@@ -507,7 +507,7 @@ def _run_cli(namespace: argparse.Namespace) -> int:
                 db_path = str(SaxsDefaults.get_user_database_path())
 
             # Read the output SAXS profile
-            output_file = advanced_params.get("out", "saxs.dat")
+            output_file = advanced_params.get("out") or "saxs.dat"
             if not Path(output_file).exists():
                 print(f"Warning: Output file {output_file} not found, cannot save to database", file=sys.stderr)
                 return 0
@@ -570,6 +570,7 @@ def _run_cli(namespace: argparse.Namespace) -> int:
                     order=advanced_params.get('order'),
                     density_g_cm3=info.get('density_g_cm3'),
                     n_atoms=info.get('n_atoms'),
+                    other_molecules=info.get('other_molecules', {}),
                     notes=f"Generated from {topology_path.name}"
                 )
 

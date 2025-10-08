@@ -23,27 +23,36 @@ def cmd_list(args):
             print("No profiles found in database.")
             return
 
-        print(f"\n{'='*80}")
+        print(f"\n{'='*100}")
         print(f"SAXS Profiles in {args.db}")
-        print(f"{'='*80}")
-        print(f"{'ID':<5} {'Water':<8} {'Ions':<20} {'Box (Å)':<25} {'Scale':<8} {'Time (ps)':<10}")
-        print(f"{'-'*80}")
+        print(f"{'='*100}")
+        print(f"{'ID':<5} {'Water':<8} {'Ions':<15} {'Other Molecules':<30} {'Box (Å)':<20} {'Scale':<8} {'Time (ps)':<10}")
+        print(f"{'-'*100}")
 
         for profile in profiles:
+            # Format ions
             ion_str = ', '.join([f"{k}:{v}" for k, v in profile['ion_counts'].items() if v > 0])
             if not ion_str:
                 ion_str = "none"
+
+            # Format other molecules (proteins, ligands)
+            other_mols = profile.get('other_molecules', {})
+            if other_mols:
+                mol_str = ', '.join([f"{k}:{v}" for k, v in other_mols.items()])
+            else:
+                mol_str = "none"
 
             box_str = f"{profile['box_x']:.1f}x{profile['box_y']:.1f}x{profile['box_z']:.1f}"
 
             print(f"{profile['id']:<5} "
                   f"{profile['water_model']:<8} "
-                  f"{ion_str:<20} "
-                  f"{box_str:<25} "
+                  f"{ion_str:<15} "
+                  f"{mol_str:<30} "
+                  f"{box_str:<20} "
                   f"{profile['supercell_scale']:<8.3f} "
                   f"{profile['simulation_time_ps']:<10.1f}")
 
-        print(f"{'-'*80}\n")
+        print(f"{'-'*100}\n")
         print(f"Total profiles: {len(profiles)}")
 
 
@@ -81,6 +90,12 @@ def cmd_info(args):
                         charge_symbol = "²⁺"
                     print(f"  {ion}{charge_symbol}: {count}")
 
+        other_mols = profile.get('other_molecules', {})
+        if other_mols:
+            print(f"\nOther Molecules (proteins, ligands, etc.):")
+            for mol, count in other_mols.items():
+                print(f"  {mol}: {count}")
+
         print(f"\n--- Box Dimensions ---")
         print(f"Size: {profile['box_x']:.3f} x {profile['box_y']:.3f} x {profile['box_z']:.3f} Å")
         print(f"Volume: {profile['box_volume']:.2f} Å³")
@@ -96,7 +111,7 @@ def cmd_info(args):
 
         print(f"\n--- SAXS Calculation ---")
         print(f"Grid Size: {profile['grid_size']}")
-        print(f"B-Spline Order: {profile['order']}")
+        print(f"B-Spline Order: {profile['spline_order']}")
         print(f"Bin Size: {profile['bin_size']}")
         print(f"Q Cutoff: {profile['qcut']}")
 
@@ -133,7 +148,7 @@ def main():
         description="Manage SAXS profile database"
     )
 
-    default_db = str(SaxsDefaults.get_default_database_path())
+    default_db = str(SaxsDefaults.get_user_database_path())
     parser.add_argument(
         "--db",
         default=default_db,

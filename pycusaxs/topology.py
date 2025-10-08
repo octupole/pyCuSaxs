@@ -338,6 +338,13 @@ class Topology:
 
         # Detailed ion information
         ion_counts = self.count_ions()
+
+        # If count_ions returned empty, try to extract from residue_counts
+        # (This handles cases where ion molecules weren't properly detected)
+        if all(v == 0 for v in ion_counts.values()):
+            # Will be populated from residue_counts below
+            pass
+
         info['ion_counts'] = {k: v for k, v in ion_counts.items() if v > 0}
 
         # Residue composition
@@ -347,20 +354,46 @@ class Topology:
             residue_counts[resname] = residue_counts.get(resname, 0) + 1
         info['residue_counts'] = residue_counts
 
+        # Extract ions from residue_counts if not already found
+        if not info['ion_counts']:
+            for resname, count in residue_counts.items():
+                resname_upper = resname.upper()
+                if resname_upper in ['NA', 'SOD']:
+                    ion_counts['Na'] = count
+                elif resname_upper in ['CL', 'CLA']:
+                    ion_counts['Cl'] = count
+                elif resname_upper == 'K':
+                    ion_counts['K'] = count
+                elif resname_upper in ['CA', 'CAL']:
+                    ion_counts['Ca'] = count
+                elif resname_upper == 'MG':
+                    ion_counts['Mg'] = count
+            info['ion_counts'] = {k: v for k, v in ion_counts.items() if v > 0}
+
+        # Extract other molecules (non-water, non-ion)
+        # These are proteins, ligands, lipids, etc.
+        water_resnames = ['SOL', 'WAT', 'TIP3', 'TIP4', 'SPC', 'HOH', 'H2O']
+        ion_resnames = ['NA', 'SOD', 'CL', 'CLA', 'K', 'CA', 'CAL', 'MG']
+        other_molecules = {}
+        for resname, count in residue_counts.items():
+            if resname.upper() not in water_resnames and resname.upper() not in ion_resnames:
+                other_molecules[resname] = count
+        info['other_molecules'] = other_molecules
+
         # Box information (from first frame)
         self.read_frame(0)
         box = self.get_box()
         if box is not None and len(box) == 3:
-            # Convert to Angstroms and extract diagonal elements
-            info['box_x'] = box[0][0]
-            info['box_y'] = box[1][1]
-            info['box_z'] = box[2][2]
+            # Convert from nm (MDAnalysis units) to Angstroms
+            info['box_x'] = float(box[0][0]) * 10.0
+            info['box_y'] = float(box[1][1]) * 10.0
+            info['box_z'] = float(box[2][2]) * 10.0
             # Calculate volume (for orthogonal box, this is simple product)
-            # For triclinic, need determinant but approximate here
-            info['box_volume'] = box[0][0] * box[1][1] * box[2][2]
+            # Volume: nm³ → Ų (multiply by 10³ = 1000)
+            info['box_volume'] = float(box[0][0] * box[1][1] * box[2][2]) * 1000.0
 
-            # Store full box matrix for triclinic cells
-            info['box_matrix'] = [[float(box[i][j]) for j in range(3)] for i in range(3)]
+            # Store full box matrix for triclinic cells (in Angstroms)
+            info['box_matrix'] = [[float(box[i][j]) * 10.0 for j in range(3)] for i in range(3)]
 
         # Protein-specific information
         if self.protein_molecules:

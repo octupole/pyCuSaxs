@@ -23,6 +23,8 @@ dependencies = [
 [project.scripts]
 pycusaxs = "pycusaxs.main:main"
 saxs-widget = "pycusaxs.main:main"
+saxs-db = "pycusaxs.saxs_db_tool:main"
+saxs-subtract = "pycusaxs.saxs_subtract:main"
 
 [tool.scikit-build]
 minimum-version = "0.7"
