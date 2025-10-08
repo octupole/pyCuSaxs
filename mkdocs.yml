@@ -117,6 +117,8 @@ nav:
   - User Guide:
     - Command Line: user-guide/cli.md
     - Graphical Interface: user-guide/gui.md
+    - Database Management: user-guide/database.md
+    - Solvent Subtraction: user-guide/solvent-subtraction.md
     - Python API: user-guide/python-api.md
   - Algorithm:
     - Overview: algorithm/overview.md
