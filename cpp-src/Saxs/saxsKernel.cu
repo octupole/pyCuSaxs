@@ -146,30 +146,20 @@ void saxsKernel::runPKernel(int frame, float Time, std::vector<std::vector<float
         rhoCartKernel<<<numBlocks, THREADS_PER_BLOCK>>>(d_particles_ptr, d_oc_or_ptr, d_grid_ptr, order,
                                                         numParticles, nx, ny, nz);
 
-        // picking the padding
+        // Calculate average padding from border density
         float myDens = 0.0f;
-        if (Options::myPadding == padding::avg)
-        {
-            thrust::host_vector<float> h_Dens = {0.0f};
-            thrust::host_vector<int> h_count = {0};
-            thrust::device_vector<float> d_Dens = h_Dens;
-            thrust::device_vector<int> d_count = h_count;
-            paddingKernel<<<gridDim0, blockDim>>>(d_grid_ptr, nx, ny, nz, mx, my, mz,
-                                                  thrust::raw_pointer_cast(d_Dens.data()),
-                                                  thrust::raw_pointer_cast(d_count.data()));
-            // REQUIRED: Must sync before copying results back to host
-            cudaDeviceSynchronize();
-            h_Dens = d_Dens;
-            h_count = d_count;
-            myDens = h_Dens[0] / (float)h_count[0];
-        }
-        else
-        {
-            if (Options::myWmodel.find(type) != Options::myWmodel.end())
-            {
-                myDens = Options::myWmodel[type];
-            }
-        }
+        thrust::host_vector<float> h_Dens = {0.0f};
+        thrust::host_vector<int> h_count = {0};
+        thrust::device_vector<float> d_Dens = h_Dens;
+        thrust::device_vector<int> d_count = h_count;
+        paddingKernel<<<gridDim0, blockDim>>>(d_grid_ptr, nx, ny, nz, mx, my, mz,
+                                              thrust::raw_pointer_cast(d_Dens.data()),
+                                              thrust::raw_pointer_cast(d_count.data()));
+        // REQUIRED: Must sync before copying results back to host
+        cudaDeviceSynchronize();
+        h_Dens = d_Dens;
+        h_count = d_count;
+        myDens = h_Dens[0] / (float)h_count[0];
 
         // zeroes the Sup density grid
         zeroDensityKernel<<<numBlocksGridSuperC, THREADS_PER_BLOCK>>>(d_gridSupC_ptr, d_gridSupC.size());
@@ -536,52 +526,20 @@ void saxsKernel::resetHistogramParameters(std::vector<std::vector<float>> &oc)
 }
 void saxsKernel::writeBanner()
 {
-    std::string padding = Options::myPadding == padding::given ? Options::Wmodel : "avg Border";
-    std::string banner{""};
-    if (Options::myPadding == padding::avg)
-    {
-        banner = fmt::format(
-            "*************************************************\n"
-            "* {:^40}      *\n"
-            "* {:<19} {:>4} * {:>4} * {:>4}        *\n"
-            "* {:<19} {:>4} * {:>4} * {:>4}        *\n"
-            "* {:<10} {:>4}      {:<10} {:>4}          *\n"
-            "* {:<10} {:>4.3f}     {:<10}  {:>3.1f}          *\n"
-            "* {:<10}           {:<14}           *\n"
-            "*************************************************\n\n",
-            "Running CuSAXS", "Cell Grid", Options::nx, Options::ny, Options::nz,
-            "Supercell Grid", Options::nnx, Options::nny, Options::nnz, "Order",
-            Options::order, "Sigma", Options::sigma, "Bin Size", Options::Dq, "Q Cutoff ", Options::Qcut, "Padding ", padding);
-    }
-    else
-    {
-        // Build ion information string
-        std::string ion_info;
-        for (const auto &ion_pair : Options::IonCounts)
-        {
-            if (ion_pair.second > 0)
-            {
-                ion_info += fmt::format("* {:<10} {:>4d}                                   *\n",
-                                        ion_pair.first + " ions", ion_pair.second);
-            }
-        }
+    std::string banner = fmt::format(
+        "*************************************************\n"
+        "* {:^45} *\n"
+        "* {:<19} {:>4} * {:>4} * {:>4}        *\n"
+        "* {:<19} {:>4} * {:>4} * {:>4}        *\n"
+        "* {:<10} {:>4}      {:<10} {:>4}          *\n"
+        "* {:<10} {:>4.3f}     {:<10}  {:>3.1f}          *\n"
+        "* {:<19} {:<25} *\n"
+        "*************************************************\n\n",
+        "Running CuSAXS", "Cell Grid", Options::nx, Options::ny, Options::nz,
+        "Supercell Grid", Options::nnx, Options::nny, Options::nnz, "Order",
+        Options::order, "Sigma", Options::sigma, "Bin Size", Options::Dq, "Q Cutoff ",
+        Options::Qcut, "Water Model", Options::Wmodel);
 
-        banner = fmt::format(
-            "*************************************************\n"
-            "* {:^45} *\n"
-            "* {:<19} {:>4} * {:>4} * {:>4}        *\n"
-            "* {:<19} {:>4} * {:>4} * {:>4}        *\n"
-            "* {:<10} {:>4}      {:<10} {:>4}          *\n"
-            "* {:<10} {:>4.3f}     {:<10}  {:>3.1f}          *\n"
-            "* {:<19} {:<25} *\n"
-            "{}"
-            "*************************************************\n\n",
-            "Running CuSAXS", "Cell Grid", Options::nx, Options::ny, Options::nz,
-            "Supercell Grid", Options::nnx, Options::nny, Options::nnz, "Order",
-            Options::order, "Sigma", Options::sigma, "Bin Size", Options::Dq, "Q Cutoff ",
-            Options::Qcut, "Water Model", Options::Wmodel,
-            ion_info);
-    }
     std::cout << banner;
 }
 

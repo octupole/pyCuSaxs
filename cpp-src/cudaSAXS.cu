@@ -94,8 +94,6 @@ CudaSaxsResult run_cuda_saxs(py::object Topol, const CudaSaxsConfig &config)
     Options::nny = scaled_grid[YY];
     Options::nnz = scaled_grid[ZZ];
 
-    Options::myPadding = Options::Wmodel.empty() ? padding::avg : padding::given;
-
     // Create nice formatted summary using fmt
     std::string banner = fmt::format(
         "\n"
@@ -181,11 +179,10 @@ CudaSaxsResult run_cuda_saxs(py::object Topol, const CudaSaxsConfig &config)
             "\n{}\n"
             "  Water Model   : {}\n"
             "{}"
-            "  Padding Mode  : {}\n",
+            "  Padding Mode  : average\n",
             fmt::format(fmt::emphasis::bold, "Solvent Model"),
             Options::Wmodel,
-            ion_list,
-            Options::myPadding == padding::given ? "explicit" : "average");
+            ion_list);
     }
     else
     {

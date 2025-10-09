@@ -10,7 +10,7 @@ int Options::nx = 0, Options::ny = 0, Options::nz = 0;
 int Options::nnx = 0, Options::nny = 0, Options::nnz = 0;
 std::string Options::Wmodel = "";
 std::map<std::string, int> Options::IonCounts;
-padding Options::myPadding = padding::avg;
+padding Options::myPadding = padding::avg;  // Always use average padding
 std::map<std::string, float> Options::myWmodel = {{"O", 0.0f}, {"H", 0.0f}};
 std::string Options::outFile = "saxs.dat";
 std::string Options::Simulation = "npt";
