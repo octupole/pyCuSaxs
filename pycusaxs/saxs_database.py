@@ -105,7 +105,8 @@ class SaxsDatabase:
 
     def _compute_profile_hash(self, water_model: str, ion_counts: Dict[str, int],
                               box_x: float, box_y: float, box_z: float,
-                              supercell_scale: float) -> str:
+                              supercell_scale: float, grid_size: Tuple[int, int, int],
+                              simulation_time_ps: float) -> str:
         """
         Compute unique hash for a solvent profile based on key parameters.
 
@@ -114,6 +115,8 @@ class SaxsDatabase:
             ion_counts: Dictionary of ion counts
             box_x, box_y, box_z: Box dimensions in Angstroms
             supercell_scale: Supercell scale factor
+            grid_size: Tuple of (nx, ny, nz)
+            simulation_time_ps: Total simulation time analyzed
 
         Returns:
             SHA256 hash string
@@ -125,7 +128,9 @@ class SaxsDatabase:
         key_string = f"{water_model}|"
         key_string += f"{sorted_ions}|"
         key_string += f"{box_x:.3f},{box_y:.3f},{box_z:.3f}|"
-        key_string += f"{supercell_scale:.4f}"
+        key_string += f"{supercell_scale:.4f}|"
+        key_string += f"{grid_size[0]}x{grid_size[1]}x{grid_size[2]}|"
+        key_string += f"{simulation_time_ps:.2f}"
 
         return hashlib.sha256(key_string.encode()).hexdigest()
 
@@ -176,7 +181,8 @@ class SaxsDatabase:
             Database row ID of inserted profile
         """
         profile_hash = self._compute_profile_hash(
-            water_model, ion_counts, box_x, box_y, box_z, supercell_scale
+            water_model, ion_counts, box_x, box_y, box_z, supercell_scale,
+            grid_size, simulation_time_ps
         )
 
         cursor = self.conn.cursor()
@@ -217,7 +223,8 @@ class SaxsDatabase:
 
     def find_profile(self, water_model: str, ion_counts: Dict[str, int],
                     box_x: float, box_y: float, box_z: float,
-                    supercell_scale: float,
+                    supercell_scale: float, grid_size: Tuple[int, int, int],
+                    simulation_time_ps: float,
                     tolerance: float = 0.01) -> Optional[Dict]:
         """
         Find matching profile in database.
@@ -227,13 +234,16 @@ class SaxsDatabase:
             ion_counts: Dictionary of ion counts
             box_x, box_y, box_z: Box dimensions
             supercell_scale: Supercell scale factor
+            grid_size: Tuple of (nx, ny, nz)
+            simulation_time_ps: Total simulation time
             tolerance: Tolerance for box dimension matching (fraction)
 
         Returns:
             Dictionary with profile data or None if not found
         """
         profile_hash = self._compute_profile_hash(
-            water_model, ion_counts, box_x, box_y, box_z, supercell_scale
+            water_model, ion_counts, box_x, box_y, box_z, supercell_scale,
+            grid_size, simulation_time_ps
         )
 
         cursor = self.conn.cursor()

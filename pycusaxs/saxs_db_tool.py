@@ -3,9 +3,11 @@
 Command-line tool for managing SAXS profile database.
 
 Usage:
-    python -m pycusaxs.saxs_db_tool list [--db DATABASE]
-    python -m pycusaxs.saxs_db_tool export ID OUTPUT_CSV [--db DATABASE]
-    python -m pycusaxs.saxs_db_tool info ID [--db DATABASE]
+    saxs-db [--db DATABASE] list [--water-model MODEL]
+    saxs-db [--db DATABASE] info ID
+    saxs-db [--db DATABASE] export ID OUTPUT.csv
+    saxs-db [--db DATABASE] plot ID OUTPUT.dat
+    saxs-db [--db DATABASE] delete ID [ID ...] [-y]
 """
 
 import argparse
@@ -23,11 +25,11 @@ def cmd_list(args):
             print("No profiles found in database.")
             return
 
-        print(f"\n{'='*100}")
+        print(f"\n{'='*130}")
         print(f"SAXS Profiles in {args.db}")
-        print(f"{'='*100}")
-        print(f"{'ID':<5} {'Water':<8} {'Ions':<15} {'Other Molecules':<30} {'Box (Å)':<20} {'Scale':<8} {'Time (ps)':<10}")
-        print(f"{'-'*100}")
+        print(f"{'='*130}")
+        print(f"{'ID':<5} {'Water':<8} {'Ions':<15} {'Other Molecules':<20} {'Box (Å)':<20} {'Grid':<15} {'Supercell':<15} {'Time (ps)':<10}")
+        print(f"{'-'*130}")
 
         for profile in profiles:
             # Format ions
@@ -44,15 +46,24 @@ def cmd_list(args):
 
             box_str = f"{profile['box_x']:.1f}x{profile['box_y']:.1f}x{profile['box_z']:.1f}"
 
+            # Format grid (cell grid)
+            grid = profile['grid_size']
+            grid_str = f"{grid[0]}x{grid[1]}x{grid[2]}"
+
+            # Calculate supercell grid
+            scale = profile['supercell_scale']
+            supercell_str = f"{int(grid[0]*scale)}x{int(grid[1]*scale)}x{int(grid[2]*scale)}"
+
             print(f"{profile['id']:<5} "
                   f"{profile['water_model']:<8} "
                   f"{ion_str:<15} "
-                  f"{mol_str:<30} "
+                  f"{mol_str:<20} "
                   f"{box_str:<20} "
-                  f"{profile['supercell_scale']:<8.3f} "
+                  f"{grid_str:<15} "
+                  f"{supercell_str:<15} "
                   f"{profile['simulation_time_ps']:<10.1f}")
 
-        print(f"{'-'*100}\n")
+        print(f"{'-'*130}\n")
         print(f"Total profiles: {len(profiles)}")
 
 
@@ -102,6 +113,9 @@ def cmd_info(args):
 
         print(f"\n--- Supercell ---")
         print(f"Scale Factor: {profile['supercell_scale']:.4f}")
+        grid = profile['grid_size']
+        scale = profile['supercell_scale']
+        print(f"Supercell Grid: {int(grid[0]*scale)} x {int(grid[1]*scale)} x {int(grid[2]*scale)}")
         print(f"Supercell Volume: {profile['supercell_volume']:.2f} Å³")
 
         print(f"\n--- Simulation Parameters ---")
@@ -143,6 +157,79 @@ def cmd_export(args):
         print(f"Profile {args.profile_id} exported to {args.output}")
 
 
+def cmd_plot(args):
+    """Export profile to simple x-y format for plotting (xmgrace, gnuplot, etc.)."""
+    with SaxsDatabase(args.db) as db:
+        cursor = db.conn.cursor()
+        cursor.execute("SELECT * FROM saxs_profiles WHERE id = ?", (args.profile_id,))
+        row = cursor.fetchone()
+
+        if not row:
+            print(f"Profile ID {args.profile_id} not found.", file=sys.stderr)
+            return 1
+
+        profile = db._row_to_dict(row)
+
+        with open(args.output, 'w') as f:
+            # Write header with metadata as comments
+            f.write(f"# SAXS Profile from Database\n")
+            f.write(f"# Profile ID: {profile['id']}\n")
+            f.write(f"# Water Model: {profile['water_model']}\n")
+            f.write(f"# Box Size: {profile['box_x']:.3f} x {profile['box_y']:.3f} x {profile['box_z']:.3f} Å\n")
+            f.write(f"# Grid: {profile['grid_size']}\n")
+            f.write(f"# Supercell Scale: {profile['supercell_scale']:.4f}\n")
+            f.write(f"# Simulation Time: {profile['simulation_time_ps']:.2f} ps\n")
+            f.write(f"# Density: {profile['density_g_cm3']:.4f} g/cm³\n")
+            f.write(f"#\n")
+            f.write(f"# q (Å⁻¹)    I(q)\n")
+
+            # Write data in simple x-y format
+            for q, iq in profile['profile_data']:
+                f.write(f"{q:.6f}  {iq:.6e}\n")
+
+        print(f"Profile {args.profile_id} exported to {args.output} (xmgrace format)")
+
+
+def cmd_delete(args):
+    """Delete one or more profiles from the database."""
+    with SaxsDatabase(args.db) as db:
+        cursor = db.conn.cursor()
+
+        # Show what will be deleted
+        for profile_id in args.profile_ids:
+            cursor.execute("SELECT * FROM saxs_profiles WHERE id = ?", (profile_id,))
+            row = cursor.fetchone()
+
+            if not row:
+                print(f"Profile ID {profile_id} not found.", file=sys.stderr)
+                continue
+
+            profile = db._row_to_dict(row)
+            print(f"\nProfile {profile_id}:")
+            print(f"  Water Model: {profile['water_model']}")
+            print(f"  Grid: {profile['grid_size']}")
+            print(f"  Supercell Scale: {profile['supercell_scale']:.4f}")
+            print(f"  Simulation Time: {profile['simulation_time_ps']:.2f} ps")
+            print(f"  Created: {profile['created_timestamp']}")
+
+        # Confirm deletion
+        if not args.yes:
+            response = input(f"\nDelete {len(args.profile_ids)} profile(s)? [y/N]: ")
+            if response.lower() != 'y':
+                print("Deletion cancelled.")
+                return 0
+
+        # Delete profiles
+        deleted = 0
+        for profile_id in args.profile_ids:
+            cursor.execute("DELETE FROM saxs_profiles WHERE id = ?", (profile_id,))
+            if cursor.rowcount > 0:
+                deleted += 1
+
+        db.conn.commit()
+        print(f"\nDeleted {deleted} profile(s).")
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Manage SAXS profile database"
@@ -174,6 +261,16 @@ def main():
     export_parser.add_argument("profile_id", type=int, help="Profile ID")
     export_parser.add_argument("output", help="Output CSV file path")
 
+    # Plot command (xmgrace format)
+    plot_parser = subparsers.add_parser("plot", help="Export profile to x-y format for plotting")
+    plot_parser.add_argument("profile_id", type=int, help="Profile ID")
+    plot_parser.add_argument("output", help="Output file path (.dat, .xy, etc.)")
+
+    # Delete command
+    delete_parser = subparsers.add_parser("delete", help="Delete profile(s) from database")
+    delete_parser.add_argument("profile_ids", type=int, nargs='+', metavar="ID", help="Profile ID(s) to delete")
+    delete_parser.add_argument("-y", "--yes", action="store_true", help="Skip confirmation prompt")
+
     args = parser.parse_args()
 
     if not args.command:
@@ -186,6 +283,10 @@ def main():
         return cmd_info(args)
     elif args.command == "export":
         cmd_export(args)
+    elif args.command == "plot":
+        return cmd_plot(args)
+    elif args.command == "delete":
+        return cmd_delete(args)
 
     return 0
 

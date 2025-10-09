@@ -387,18 +387,16 @@ class Topology:
         self.read_frame(0)
         box = self.get_box()
         if box is not None and len(box) == 3:
-            # Convert from nm (MDAnalysis units) to Angstroms
-            info['box_x'] = float(box[0][0]) * 10.0
-            info['box_y'] = float(box[1][1]) * 10.0
-            info['box_z'] = float(box[2][2]) * 10.0
-            # Calculate volume (for orthogonal box, this is simple product)
-            # Volume: nm³ → Ų (multiply by 10³ = 1000)
-            info['box_volume'] = float(
-                box[0][0] * box[1][1] * box[2][2]) * 1000.0
+            # get_box() already returns values in Angstroms
+            info['box_x'] = float(box[0][0])
+            info['box_y'] = float(box[1][1])
+            info['box_z'] = float(box[2][2])
+            # Calculate volume (already in Ų)
+            info['box_volume'] = float(box[0][0] * box[1][1] * box[2][2])
 
-            # Store full box matrix for triclinic cells (in Angstroms)
+            # Store full box matrix for triclinic cells (already in Angstroms)
             info['box_matrix'] = [
-                [float(box[i][j]) * 10.0 for j in range(3)] for i in range(3)]
+                [float(box[i][j]) for j in range(3)] for i in range(3)]
 
         # Protein-specific information
         if self.protein_molecules:

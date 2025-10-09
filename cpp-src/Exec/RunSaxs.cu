@@ -224,7 +224,7 @@ void RunSaxs::Run(py::object Topol, int beg, int end, int dt)
         for (auto data : myhisto)
         {
             myfile << std::fixed << std::setw(10) << std::setprecision(5) << data[0];
-            myfile << std::scientific << std::setprecision(5) << std::setw(12) << data[1] / volume_avg << std::endl;
+            myfile << std::scientific << std::setprecision(5) << std::setw(12) << data[1] << std::endl;
 
             if (!myfile.good())
             {

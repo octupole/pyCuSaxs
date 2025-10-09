@@ -1,17 +1,18 @@
 # SAXS Profile Databases
 
-This directory contains the **reference solvent database** shipped with pyCuSAXS.
+This directory contains the **reference solvent database** for pyCuSAXS.
 
 ## Database Structure
 
-### 1. Reference Solvent Database (Read-Only)
-**Location**: `data/reference_solvents.db`
+### 1. Reference Solvent Database
+**Location**: `pycusaxs/data/reference_solvents.db` (inside installed package)
 
 - **Purpose**: Reference library of pure solvent SAXS profiles
 - **Content**: 4-5 carefully validated solvent systems
-- **Usage**: Shipped with package, used for subtraction from protein+solvent profiles
-- **Version Control**: Tracked in git
-- **User Access**: Read-only
+- **Usage**: Used for subtraction from protein+solvent profiles
+- **Version Control**: Tracked in git (initially empty)
+- **User Access**: Writable by package maintainers
+- **Installation**: This directory is copied to the installed package location
 
 **Reference profiles to include:**
 - TIP3P pure water
@@ -87,8 +88,12 @@ python -m pycusaxs.saxs_subtract \
 
 | Database | Location | Access | Purpose |
 |----------|----------|--------|---------|
-| Reference | `<pkg>/data/reference_solvents.db` | Read-only | Pure solvent profiles (shipped) |
+| Reference | `<installed_pkg>/pycusaxs/data/reference_solvents.db` | Writable | Pure solvent profiles (shipped) |
 | User | `~/.local/share/pycusaxs/user_profiles.db` | Read-write | User's calculations |
+
+**Note**: The reference database is installed inside the Python package directory (e.g.,
+`/opt/miniforge3/envs/pycusaxs/lib/python3.13/site-packages/pycusaxs/data/`). It will be
+created automatically when you first use `--save-reference`.
 
 ## Example Workflow
 

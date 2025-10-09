@@ -107,7 +107,7 @@ void saxsKernel::runPKernel(int frame, float Time, std::vector<std::vector<float
     // No sync needed - will be used later after loop
 
     float totParticles{0};
-    std::string formatted_string = fmt::format("--> Frame: {:<7}  Time Step: {:.2f} fs", frame, Time);
+    std::string formatted_string = fmt::format("--> Frame: {:<7}  Time Step: {:.2f} ps", frame, Time);
 
     // Print the formatted string
     std::cout << formatted_string << std::endl;

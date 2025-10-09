@@ -23,22 +23,9 @@ def build_output_paths(base: str, frame_range: range) -> List[Path]:
     """Derive per-frame PDB paths from a base filename or directory."""
     base_path = None
     if base:
-        # Sanitize path: resolve to absolute path and check for directory traversal
+        # Resolve path to absolute path
         try:
             base_path = Path(base).expanduser().resolve()
-            # Prevent directory traversal outside of current working directory or home
-            cwd = Path.cwd().resolve()
-            home = Path.home().resolve()
-
-            # Check if path is within allowed directories
-            try:
-                base_path.relative_to(cwd)
-            except ValueError:
-                try:
-                    base_path.relative_to(home)
-                except ValueError:
-                    raise ValueError(
-                        f"Path '{base}' is outside allowed directories")
         except (OSError, RuntimeError) as e:
             raise ValueError(f"Invalid path '{base}': {e}")
 
@@ -109,7 +96,7 @@ def _invoke_cuda_backend(required_params: Dict[str, Any],
 
 
 def cuda_connect(required_params: Dict[str, Any], advanced_params: Dict[str, Any]) -> Iterable[str]:
-    # Sanitize file paths
+    # Resolve file paths
     try:
         topology_path = Path(
             required_params["topology"]).expanduser().resolve()
@@ -117,20 +104,6 @@ def cuda_connect(required_params: Dict[str, Any], advanced_params: Dict[str, Any
             required_params["trajectory"]).expanduser().resolve()
     except (OSError, RuntimeError) as e:
         raise ValueError(f"Invalid file path: {e}")
-
-    # Validate paths are within allowed directories
-    cwd = Path.cwd().resolve()
-    home = Path.home().resolve()
-
-    for file_path, name in [(topology_path, "topology"), (trajectory_path, "trajectory")]:
-        try:
-            file_path.relative_to(cwd)
-        except ValueError:
-            try:
-                file_path.relative_to(home)
-            except ValueError:
-                raise ValueError(
-                    f"{name.capitalize()} file path is outside allowed directories: {file_path}")
 
     begin = int(required_params["initial_frame"])
     end = int(required_params["last_frame"])
@@ -531,10 +504,18 @@ def _run_cli(namespace: argparse.Namespace) -> int:
             info = topo.get_system_info()
 
             # Calculate simulation time analyzed
-            n_frames = required_params["last_frame"] - required_params["initial_frame"] + 1
-            dt = advanced_params.get("dt", 1)
+            first_frame = required_params["initial_frame"]
+            last_frame_requested = required_params["last_frame"]
+            trajectory_dt = info.get('dt', 0.0)  # ps per frame in trajectory
+            dt = advanced_params.get("dt", 1)  # frame stride
+
+            # Calculate the actual last frame processed (accounting for stride)
+            n_frames = last_frame_requested - first_frame + 1
             actual_frames = (n_frames + dt - 1) // dt
-            sim_time_ps = actual_frames * info.get('dt', 0.0) if info.get('dt') else 0.0
+            last_frame_processed = first_frame + (actual_frames - 1) * dt
+
+            # Total simulation time is from first to last PROCESSED frame
+            sim_time_ps = (last_frame_processed - first_frame) * trajectory_dt if trajectory_dt else 0.0
 
             # Get supercell scale
             scale_raw = advanced_params.get("grid_scaled", advanced_params.get("scale_factor", 0.0))

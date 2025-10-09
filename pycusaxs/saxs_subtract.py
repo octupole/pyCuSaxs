@@ -1,303 +1,329 @@
 #!/usr/bin/env python3
 """
-Tool to subtract solvent SAXS profile from protein+solvent profile.
-
-This computes: I_protein(q) = I_total(q) - I_solvent(q)
-
-Usage:
-    python -m pycusaxs.saxs_subtract --protein-id 10 --solvent-id 2 --output protein_only.dat
-    python -m pycusaxs.saxs_subtract --protein-file protein_solvent.dat --solvent-file water.dat --output protein_only.dat
+Interactive tool for subtracting reference solvent SAXS profiles from experimental profiles.
 """
 
-import argparse
 import sys
-import numpy as np
+import argparse
 from pathlib import Path
-from typing import List, Tuple, Optional
+from typing import Tuple, List
+import numpy as np
+from scipy.interpolate import interp1d
 
-from .saxs_database import SaxsDatabase
-from .saxs_defaults import SaxsDefaults
+from pycusaxs.saxs_database import SaxsDatabase
+from pycusaxs.saxs_defaults import SaxsDefaults
 
 
-def read_saxs_dat(file_path: str) -> Tuple[np.ndarray, np.ndarray]:
+def list_profiles(db: SaxsDatabase, title: str) -> List[dict]:
+    """List profiles in a database and return them."""
+    profiles = db.list_profiles()
+
+    if not profiles:
+        print(f"\n{title}: No profiles found.")
+        return []
+
+    print(f"\n{title}:")
+    print(f"{'ID':<5} {'Water Model':<15} {'Grid':<15} {'Supercell':<15} {'Time (ps)':<12} {'Density (g/cm³)':<18}")
+    print("-" * 100)
+
+    for profile in profiles:
+        grid = profile['grid_size']
+        grid_str = f"{grid[0]}x{grid[1]}x{grid[2]}"
+
+        scale = profile['supercell_scale']
+        supercell_str = f"{int(grid[0]*scale)}x{int(grid[1]*scale)}x{int(grid[2]*scale)}"
+
+        print(f"{profile['id']:<5} {profile['water_model']:<15} {grid_str:<15} {supercell_str:<15} "
+              f"{profile['simulation_time_ps']:<12.2f} {profile['density_g_cm3']:<18.4f}")
+
+    return profiles
+
+
+def interpolate_profile(q_ref: np.ndarray, iq_ref: np.ndarray,
+                        q_target: np.ndarray, method: str = 'cubic') -> np.ndarray:
     """
-    Read SAXS profile from .dat file.
+    Interpolate reference profile to match target q-grid.
 
     Args:
-        file_path: Path to .dat file
+        q_ref: Reference q values
+        iq_ref: Reference I(q) values
+        q_target: Target q values
+        method: Interpolation method ('linear' or 'cubic')
 
     Returns:
-        Tuple of (q_values, intensity_values)
+        Interpolated I(q) values on target grid
     """
-    q_values = []
-    i_values = []
+    if method == 'cubic':
+        interpolator = interp1d(q_ref, iq_ref, kind='cubic',
+                               bounds_error=False, fill_value='extrapolate')
+    else:
+        interpolator = interp1d(q_ref, iq_ref, kind='linear',
+                               bounds_error=False, fill_value='extrapolate')
 
-    with open(file_path, 'r') as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith('#'):
-                continue
-
-            parts = line.split()
-            if len(parts) >= 2:
-                try:
-                    q = float(parts[0])
-                    iq = float(parts[1])
-                    q_values.append(q)
-                    i_values.append(iq)
-                except ValueError:
-                    continue
-
-    return np.array(q_values), np.array(i_values)
+    return interpolator(q_target)
 
 
-def interpolate_profile(q_target: np.ndarray, q_source: np.ndarray,
-                       i_source: np.ndarray) -> np.ndarray:
+def get_user_choice(prompt: str, min_val: int, max_val: int) -> int:
+    """Get user input within a valid range."""
+    while True:
+        try:
+            choice = int(input(prompt))
+            if min_val <= choice <= max_val:
+                return choice
+            print(f"Please enter a number between {min_val} and {max_val}.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+        except (KeyboardInterrupt, EOFError):
+            print("\nOperation cancelled.")
+            sys.exit(0)
+
+
+def get_scaling_factor(user_profile: dict, ref_profile: dict, auto: bool = False) -> float:
     """
-    Interpolate intensity values to match target q-values.
+    Get or calculate the scaling factor for subtraction.
 
     Args:
-        q_target: Target q-values
-        q_source: Source q-values
-        i_source: Source intensity values
+        user_profile: User's experimental profile
+        ref_profile: Reference solvent profile
+        auto: If True, auto-calculate from densities and volumes
 
     Returns:
-        Interpolated intensity values at q_target
+        Scaling factor
     """
-    return np.interp(q_target, q_source, i_source, left=0.0, right=0.0)
+    if auto:
+        # Estimate scaling from relative volumes and densities
+        user_vol = user_profile['box_volume']
+        ref_vol = ref_profile['box_volume']
+        user_dens = user_profile['density_g_cm3']
+        ref_dens = ref_profile['density_g_cm3']
+
+        # Scale by volume ratio (assuming same number of water molecules should scale with volume)
+        scale = user_vol / ref_vol if ref_vol > 0 else 1.0
+
+        print(f"\nAuto-calculated scaling factor: {scale:.6f}")
+        print(f"  Based on volume ratio: {user_vol:.2f} / {ref_vol:.2f} Ų")
+
+        response = input("Use this scaling factor? [Y/n]: ").strip().lower()
+        if response in ('', 'y', 'yes'):
+            return scale
+
+    # Manual input
+    while True:
+        try:
+            scale_str = input("\nEnter scaling factor for reference subtraction: ").strip()
+            scale = float(scale_str)
+            if scale > 0:
+                return scale
+            print("Scaling factor must be positive.")
+        except ValueError:
+            print("Invalid input. Please enter a number.")
+        except (KeyboardInterrupt, EOFError):
+            print("\nOperation cancelled.")
+            sys.exit(0)
 
 
-def subtract_profiles(q_protein: np.ndarray, i_protein: np.ndarray,
-                     q_solvent: np.ndarray, i_solvent: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+def subtract_profiles(user_profile: dict, ref_profile: dict,
+                     scale: float, interp_method: str = 'cubic') -> Tuple[np.ndarray, np.ndarray]:
     """
-    Subtract solvent profile from protein+solvent profile.
+    Subtract scaled reference profile from user profile.
 
     Args:
-        q_protein: Q-values from protein+solvent
-        i_protein: Intensity from protein+solvent
-        q_solvent: Q-values from pure solvent
-        i_solvent: Intensity from pure solvent
+        user_profile: User's experimental profile
+        ref_profile: Reference solvent profile
+        scale: Scaling factor for reference
+        interp_method: Interpolation method if grids differ
 
     Returns:
-        Tuple of (q_values, subtracted_intensity)
+        (q, I_subtracted) arrays
     """
-    # Interpolate solvent profile to match protein q-grid
-    i_solvent_interp = interpolate_profile(q_protein, q_solvent, i_solvent)
+    # Extract profiles
+    user_data = np.array(user_profile['profile_data'])
+    ref_data = np.array(ref_profile['profile_data'])
 
-    # Subtract
-    i_diff = i_protein - i_solvent_interp
+    q_user = user_data[:, 0]
+    iq_user = user_data[:, 1]
 
-    return q_protein, i_diff
+    q_ref = ref_data[:, 0]
+    iq_ref = ref_data[:, 1]
 
+    # Check if grids match
+    grids_match = (len(q_user) == len(q_ref) and
+                   np.allclose(q_user, q_ref, rtol=1e-6))
 
-def write_saxs_profile(file_path: str, q_values: np.ndarray, i_values: np.ndarray,
-                      header: Optional[List[str]] = None):
-    """
-    Write SAXS profile to file.
+    if grids_match:
+        print(f"\nQ-grids match exactly ({len(q_user)} points)")
+        iq_ref_interp = iq_ref
+    else:
+        print(f"\nQ-grids differ: user has {len(q_user)} points, reference has {len(q_ref)} points")
+        print(f"User q range: [{q_user[0]:.6f}, {q_user[-1]:.6f}] Å⁻¹")
+        print(f"Reference q range: [{q_ref[0]:.6f}, {q_ref[-1]:.6f}] Å⁻¹")
+        print(f"Interpolating reference profile using {interp_method} interpolation...")
 
-    Args:
-        file_path: Output file path
-        q_values: Q-values
-        i_values: Intensity values
-        header: Optional header lines
-    """
-    with open(file_path, 'w') as f:
-        if header:
-            for line in header:
-                f.write(f"# {line}\n")
+        iq_ref_interp = interpolate_profile(q_ref, iq_ref, q_user, method=interp_method)
 
-        f.write("# q (1/Å), I(q) (1/Å³)\n")
+    # Perform subtraction
+    iq_subtracted = iq_user - scale * iq_ref_interp
 
-        for q, iq in zip(q_values, i_values):
-            f.write(f"{q:.6f}\t{iq:.6e}\n")
-
-
-def subtract_from_database(protein_id: int, solvent_id: int, output_file: str,
-                          user_db: str, reference_db: str):
-    """
-    Subtract profiles from databases.
-
-    Args:
-        protein_id: Profile ID in user database
-        solvent_id: Profile ID in reference database
-        output_file: Output file path
-        user_db: Path to user database
-        reference_db: Path to reference database
-    """
-    # Load protein+solvent profile from user database
-    with SaxsDatabase(user_db) as db:
-        cursor = db.conn.cursor()
-        cursor.execute("SELECT * FROM saxs_profiles WHERE id = ?", (protein_id,))
-        row = cursor.fetchone()
-
-        if not row:
-            raise ValueError(f"Protein profile ID {protein_id} not found in user database")
-
-        protein_profile = db._row_to_dict(row)
-
-    # Load solvent profile from reference database
-    with SaxsDatabase(reference_db) as db:
-        cursor = db.conn.cursor()
-        cursor.execute("SELECT * FROM saxs_profiles WHERE id = ?", (solvent_id,))
-        row = cursor.fetchone()
-
-        if not row:
-            raise ValueError(f"Solvent profile ID {solvent_id} not found in reference database")
-
-        solvent_profile = db._row_to_dict(row)
-
-    # Extract data
-    protein_data = np.array(protein_profile['profile_data'])
-    solvent_data = np.array(solvent_profile['profile_data'])
-
-    q_protein = protein_data[:, 0]
-    i_protein = protein_data[:, 1]
-    q_solvent = solvent_data[:, 0]
-    i_solvent = solvent_data[:, 1]
-
-    # Subtract
-    q_result, i_result = subtract_profiles(q_protein, i_protein, q_solvent, i_solvent)
-
-    # Generate header
-    header = [
-        "SAXS Profile Subtraction",
-        f"Protein+Solvent Profile ID: {protein_id} (from user database)",
-        f"  Water Model: {protein_profile['water_model']}",
-        f"  Box: {protein_profile['box_x']:.1f} x {protein_profile['box_y']:.1f} x {protein_profile['box_z']:.1f} Å",
-        f"  Supercell Scale: {protein_profile['supercell_scale']:.4f}",
-        "",
-        f"Pure Solvent Profile ID: {solvent_id} (from reference database)",
-        f"  Water Model: {solvent_profile['water_model']}",
-        f"  Box: {solvent_profile['box_x']:.1f} x {solvent_profile['box_y']:.1f} x {solvent_profile['box_z']:.1f} Å",
-        f"  Supercell Scale: {solvent_profile['supercell_scale']:.4f}",
-        "",
-        "Result: I_protein(q) = I_total(q) - I_solvent(q)",
-    ]
-
-    # Write output
-    write_saxs_profile(output_file, q_result, i_result, header)
-
-    print(f"\nSubtraction completed successfully!")
-    print(f"Input: Protein+Solvent (ID {protein_id}) - Solvent (ID {solvent_id})")
-    print(f"Output: {output_file}")
-    print(f"Data points: {len(q_result)}")
+    return q_user, iq_subtracted
 
 
-def subtract_from_files(protein_file: str, solvent_file: str, output_file: str):
-    """
-    Subtract profiles from .dat files.
+def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
+                           user_profile: dict, ref_profile: dict, scale: float):
+    """Save subtracted profile to file with metadata."""
+    with open(output_path, 'w') as f:
+        f.write("# SAXS Profile after Solvent Subtraction\n")
+        f.write("#\n")
+        f.write("# User Profile:\n")
+        f.write(f"#   ID: {user_profile['id']}\n")
+        f.write(f"#   Water Model: {user_profile['water_model']}\n")
+        f.write(f"#   Grid: {user_profile['grid_size']}\n")
+        f.write(f"#   Supercell Scale: {user_profile['supercell_scale']:.4f}\n")
+        f.write(f"#   Box: {user_profile['box_x']:.3f} x {user_profile['box_y']:.3f} x {user_profile['box_z']:.3f} Å\n")
+        f.write(f"#   Volume: {user_profile['box_volume']:.2f} Ų\n")
+        f.write(f"#   Density: {user_profile['density_g_cm3']:.4f} g/cm³\n")
+        f.write(f"#   Simulation Time: {user_profile['simulation_time_ps']:.2f} ps\n")
+        f.write("#\n")
+        f.write("# Reference Profile (subtracted):\n")
+        f.write(f"#   ID: {ref_profile['id']}\n")
+        f.write(f"#   Water Model: {ref_profile['water_model']}\n")
+        f.write(f"#   Grid: {ref_profile['grid_size']}\n")
+        f.write(f"#   Supercell Scale: {ref_profile['supercell_scale']:.4f}\n")
+        f.write(f"#   Box: {ref_profile['box_x']:.3f} x {ref_profile['box_y']:.3f} x {ref_profile['box_z']:.3f} Å\n")
+        f.write(f"#   Volume: {ref_profile['box_volume']:.2f} Ų\n")
+        f.write(f"#   Density: {ref_profile['density_g_cm3']:.4f} g/cm³\n")
+        f.write(f"#   Simulation Time: {ref_profile['simulation_time_ps']:.2f} ps\n")
+        f.write(f"#   Scaling Factor: {scale:.6f}\n")
+        f.write("#\n")
+        f.write("# q (Å⁻¹)    I(q) [subtracted]\n")
 
-    Args:
-        protein_file: Path to protein+solvent .dat file
-        solvent_file: Path to pure solvent .dat file
-        output_file: Output file path
-    """
-    # Read files
-    q_protein, i_protein = read_saxs_dat(protein_file)
-    q_solvent, i_solvent = read_saxs_dat(solvent_file)
-
-    # Subtract
-    q_result, i_result = subtract_profiles(q_protein, i_protein, q_solvent, i_solvent)
-
-    # Generate header
-    header = [
-        "SAXS Profile Subtraction",
-        f"Protein+Solvent File: {protein_file}",
-        f"Pure Solvent File: {solvent_file}",
-        "",
-        "Result: I_protein(q) = I_total(q) - I_solvent(q)",
-    ]
-
-    # Write output
-    write_saxs_profile(output_file, q_result, i_result, header)
-
-    print(f"\nSubtraction completed successfully!")
-    print(f"Input: {protein_file} - {solvent_file}")
-    print(f"Output: {output_file}")
-    print(f"Data points: {len(q_result)}")
+        for q_val, iq_val in zip(q, iq):
+            f.write(f"{q_val:.6f}  {iq_val:.6e}\n")
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Subtract solvent SAXS profile from protein+solvent profile"
+        description="Subtract reference solvent SAXS profile from experimental profile",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  # Interactive mode
+  saxs-subtract --db my_data.db --id 1
+
+  # Specify reference database and auto-calculate scaling
+  saxs-subtract --db my_data.db --id 1 --ref-db reference.db --auto-scale
+
+  # Specify output file
+  saxs-subtract --db my_data.db --id 1 -o subtracted.dat
+
+  # Use linear interpolation instead of cubic
+  saxs-subtract --db my_data.db --id 1 --interp linear
+        """
     )
 
-    # Database mode
-    db_group = parser.add_argument_group("Database mode (subtract profiles from databases)")
-    db_group.add_argument(
-        "--protein-id",
-        type=int,
-        help="Profile ID in user database (protein+solvent system)"
-    )
-    db_group.add_argument(
-        "--solvent-id",
-        type=int,
-        help="Profile ID in reference database (pure solvent system)"
-    )
-    db_group.add_argument(
-        "--user-db",
-        default=str(SaxsDefaults.get_user_database_path()),
-        help=f"User database path (default: {SaxsDefaults.get_user_database_path()})"
-    )
-    db_group.add_argument(
-        "--reference-db",
-        default=str(SaxsDefaults.get_reference_database_path()),
-        help=f"Reference database path (default: {SaxsDefaults.get_reference_database_path()})"
-    )
-
-    # File mode
-    file_group = parser.add_argument_group("File mode (subtract .dat files)")
-    file_group.add_argument(
-        "--protein-file",
-        help="Path to protein+solvent .dat file"
-    )
-    file_group.add_argument(
-        "--solvent-file",
-        help="Path to pure solvent .dat file"
-    )
-
-    # Common arguments
-    parser.add_argument(
-        "-o", "--output",
-        required=True,
-        help="Output file path for subtracted profile"
-    )
+    parser.add_argument("--db", required=True, type=str,
+                       help="Path to user database containing experimental profile")
+    parser.add_argument("--id", required=True, type=int,
+                       help="Profile ID from user database to process")
+    parser.add_argument("--ref-db", type=str,
+                       help="Path to reference database (default: package reference database)")
+    parser.add_argument("-o", "--output", type=str,
+                       help="Output file path (default: subtracted_<id>.dat)")
+    parser.add_argument("--auto-scale", action="store_true",
+                       help="Auto-calculate scaling factor from volumes and densities")
+    parser.add_argument("--interp", choices=['linear', 'cubic'], default='cubic',
+                       help="Interpolation method if q-grids differ (default: cubic)")
 
     args = parser.parse_args()
 
-    # Validate arguments
-    db_mode = args.protein_id is not None and args.solvent_id is not None
-    file_mode = args.protein_file is not None and args.solvent_file is not None
+    # Determine reference database path
+    if args.ref_db:
+        ref_db_path = Path(args.ref_db).expanduser().resolve()
+    else:
+        ref_db_path = SaxsDefaults.get_reference_database_path()
 
-    if not db_mode and not file_mode:
-        parser.error("Must specify either --protein-id/--solvent-id OR --protein-file/--solvent-file")
-
-    if db_mode and file_mode:
-        parser.error("Cannot use both database mode and file mode simultaneously")
-
-    try:
-        if db_mode:
-            subtract_from_database(
-                args.protein_id,
-                args.solvent_id,
-                args.output,
-                args.user_db,
-                args.reference_db
-            )
-        else:
-            subtract_from_files(
-                args.protein_file,
-                args.solvent_file,
-                args.output
-            )
-
-        return 0
-
-    except Exception as exc:
-        print(f"Error: {exc}", file=sys.stderr)
-        import traceback
-        traceback.print_exc()
+    if not ref_db_path.exists():
+        print(f"Error: Reference database not found: {ref_db_path}", file=sys.stderr)
         return 1
+
+    user_db_path = Path(args.db).expanduser().resolve()
+    if not user_db_path.exists():
+        print(f"Error: User database not found: {user_db_path}", file=sys.stderr)
+        return 1
+
+    # Load user profile
+    print(f"\nLoading user profile from: {user_db_path}")
+    with SaxsDatabase(user_db_path) as user_db:
+        user_profile = user_db.get_profile(args.id)
+        if not user_profile:
+            print(f"Error: Profile ID {args.id} not found in user database.", file=sys.stderr)
+            return 1
+
+        print(f"\nUser Profile {args.id}:")
+        print(f"  Water Model: {user_profile['water_model']}")
+        print(f"  Grid: {user_profile['grid_size']}")
+        print(f"  Supercell Scale: {user_profile['supercell_scale']:.4f}")
+        print(f"  Box: {user_profile['box_x']:.3f} x {user_profile['box_y']:.3f} x {user_profile['box_z']:.3f} Å")
+        print(f"  Volume: {user_profile['box_volume']:.2f} Ų")
+        print(f"  Density: {user_profile['density_g_cm3']:.4f} g/cm³")
+        print(f"  Simulation Time: {user_profile['simulation_time_ps']:.2f} ps")
+
+    # List reference profiles and get user selection
+    print(f"\nReference database: {ref_db_path}")
+    with SaxsDatabase(ref_db_path) as ref_db:
+        ref_profiles = list_profiles(ref_db, "Available Reference Profiles")
+
+        if not ref_profiles:
+            print("\nError: No reference profiles available.", file=sys.stderr)
+            return 1
+
+        # User selects reference profile
+        ref_id = get_user_choice(
+            f"\nSelect reference profile ID (1-{len(ref_profiles)}): ",
+            1, len(ref_profiles)
+        )
+
+        ref_profile = ref_db.get_profile(ref_id)
+        if not ref_profile:
+            print(f"Error: Could not load reference profile {ref_id}.", file=sys.stderr)
+            return 1
+
+    # Get scaling factor
+    scale = get_scaling_factor(user_profile, ref_profile, auto=args.auto_scale)
+
+    print(f"\nSubtracting reference profile {ref_id} (scaled by {scale:.6f})...")
+
+    # Perform subtraction
+    q, iq_subtracted = subtract_profiles(user_profile, ref_profile, scale,
+                                        interp_method=args.interp)
+
+    # Determine output path
+    if args.output:
+        output_path = Path(args.output)
+    else:
+        output_path = Path(f"subtracted_{args.id}.dat")
+
+    # Save result
+    save_subtracted_profile(output_path, q, iq_subtracted,
+                           user_profile, ref_profile, scale)
+
+    print(f"\nSubtracted profile saved to: {output_path}")
+    print(f"Data points: {len(q)}")
+    print(f"Q range: [{q[0]:.6f}, {q[-1]:.6f}] Å⁻¹")
+
+    # Show some statistics
+    print(f"\nIntensity statistics after subtraction:")
+    print(f"  Min I(q): {np.min(iq_subtracted):.6e}")
+    print(f"  Max I(q): {np.max(iq_subtracted):.6e}")
+    print(f"  Mean I(q): {np.mean(iq_subtracted):.6e}")
+
+    # Warn if many negative values
+    n_negative = np.sum(iq_subtracted < 0)
+    if n_negative > 0:
+        pct_negative = 100 * n_negative / len(iq_subtracted)
+        print(f"\nWarning: {n_negative} ({pct_negative:.1f}%) data points are negative.")
+        print(f"This may indicate over-subtraction (scaling factor too large).")
+
+    return 0
 
 
 if __name__ == "__main__":

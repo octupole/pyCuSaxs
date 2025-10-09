@@ -28,10 +28,6 @@ saxs-subtract = "pycusaxs.saxs_subtract:main"
 
 [tool.scikit-build]
 minimum-version = "0.7"
-
-[tool.scikit-build.wheel]
-packages = ["pycusaxs"]
-
-[tool.scikit-build.cmake]
-build-type = "Release"
-source-dir = "."
+wheel.packages = ["pycusaxs"]
+cmake.build-type = "Release"
+cmake.source-dir = "."

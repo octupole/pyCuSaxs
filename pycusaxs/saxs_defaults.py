@@ -33,10 +33,12 @@ class SaxsDefaults:
     # Database defaults
     @staticmethod
     def get_reference_database_path() -> Path:
-        """Get path to read-only reference solvent database (shipped with package)."""
-        # Get the package directory
-        package_dir = Path(__file__).parent.parent
+        """Get path to reference solvent database (in package data directory)."""
+        # Get the package directory (where saxs_defaults.py is located)
+        package_dir = Path(__file__).parent
         data_dir = package_dir / "data"
+        # Create directory if it doesn't exist (for fresh installs)
+        data_dir.mkdir(parents=True, exist_ok=True)
         return data_dir / "reference_solvents.db"
 
     @staticmethod
