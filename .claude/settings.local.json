@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(test:*)",
+      "Bash(cat:*)",
+      "Bash(source:*)",
+      "Bash(mkdocs --version)",
+      "Bash(pip install:*)",
+      "Bash(python3 -m pip install:*)",
+      "Bash(find:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(git remote set-url origin https://$GITHUB_TOKEN@github.com/octupole/pyCuSaxs.git)",
+      "Bash(git config:*)",
+      "Bash(git rm:*)",
+      "Bash(gh run list:*)",
+      "Bash(gh run view:*)",
+      "Bash(python:*)",
+      "Bash(sqlite3:*)",
+      "Bash(saxs-db list:*)",
+      "Bash(python3:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
