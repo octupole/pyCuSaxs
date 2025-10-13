@@ -14,6 +14,11 @@ from pycusaxs.saxs_database import SaxsDatabase
 from pycusaxs.saxs_defaults import SaxsDefaults
 
 
+def _format_density(value) -> str:
+    """Return density as formatted string handling missing values."""
+    return f"{value:.4f}" if value is not None else "N/A"
+
+
 def list_profiles(db: SaxsDatabase, title: str) -> List[dict]:
     """List profiles in a database and return them."""
     profiles = db.list_profiles()
@@ -33,8 +38,9 @@ def list_profiles(db: SaxsDatabase, title: str) -> List[dict]:
         scale = profile['supercell_scale']
         supercell_str = f"{int(grid[0]*scale)}x{int(grid[1]*scale)}x{int(grid[2]*scale)}"
 
+        density_str = _format_density(profile.get('density_g_cm3'))
         print(f"{profile['id']:<5} {profile['water_model']:<15} {grid_str:<15} {supercell_str:<15} "
-              f"{profile['simulation_time_ps']:<12.2f} {profile['density_g_cm3']:<18.4f}")
+              f"{profile['simulation_time_ps']:<12.2f} {density_str:<18}")
 
     return profiles
 
@@ -180,7 +186,8 @@ def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
         f.write(f"#   Supercell Scale: {user_profile['supercell_scale']:.4f}\n")
         f.write(f"#   Box: {user_profile['box_x']:.3f} x {user_profile['box_y']:.3f} x {user_profile['box_z']:.3f} Å\n")
         f.write(f"#   Volume: {user_profile['box_volume']:.2f} Ų\n")
-        f.write(f"#   Density: {user_profile['density_g_cm3']:.4f} g/cm³\n")
+        user_density = _format_density(user_profile.get('density_g_cm3'))
+        f.write(f"#   Density: {user_density} g/cm³\n")
         f.write(f"#   Simulation Time: {user_profile['simulation_time_ps']:.2f} ps\n")
         f.write("#\n")
         f.write("# Reference Profile (subtracted):\n")
@@ -190,7 +197,8 @@ def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
         f.write(f"#   Supercell Scale: {ref_profile['supercell_scale']:.4f}\n")
         f.write(f"#   Box: {ref_profile['box_x']:.3f} x {ref_profile['box_y']:.3f} x {ref_profile['box_z']:.3f} Å\n")
         f.write(f"#   Volume: {ref_profile['box_volume']:.2f} Ų\n")
-        f.write(f"#   Density: {ref_profile['density_g_cm3']:.4f} g/cm³\n")
+        ref_density = _format_density(ref_profile.get('density_g_cm3'))
+        f.write(f"#   Density: {ref_density} g/cm³\n")
         f.write(f"#   Simulation Time: {ref_profile['simulation_time_ps']:.2f} ps\n")
         f.write(f"#   Scaling Factor: {scale:.6f}\n")
         f.write("#\n")
@@ -264,7 +272,8 @@ Examples:
         print(f"  Supercell Scale: {user_profile['supercell_scale']:.4f}")
         print(f"  Box: {user_profile['box_x']:.3f} x {user_profile['box_y']:.3f} x {user_profile['box_z']:.3f} Å")
         print(f"  Volume: {user_profile['box_volume']:.2f} Ų")
-        print(f"  Density: {user_profile['density_g_cm3']:.4f} g/cm³")
+        density_str = _format_density(user_profile.get('density_g_cm3'))
+        print(f"  Density: {density_str} g/cm³")
         print(f"  Simulation Time: {user_profile['simulation_time_ps']:.2f} ps")
 
     # List reference profiles and get user selection

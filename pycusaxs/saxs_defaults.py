@@ -61,6 +61,8 @@ class SaxsDefaults:
     # UI-specific defaults
     GRID_SIZE_RANGE_MIN: int = 1
     GRID_SIZE_RANGE_MAX: int = 9_999_999
+    FRAME_RANGE_MIN: int = 0
+    FRAME_RANGE_MAX: int = 9_999_999
     DT_RANGE_MIN: int = 1
     DT_RANGE_MAX: int = 1_000_000
     ORDER_RANGE_MIN: int = 1

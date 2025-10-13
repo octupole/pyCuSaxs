@@ -18,6 +18,7 @@ dependencies = [
     "MDAnalysis>=2.0",
     "networkx>=3.0",
     "numpy>=1.23",
+    "tqdm>=4.65",
 ]
 
 [project.scripts]

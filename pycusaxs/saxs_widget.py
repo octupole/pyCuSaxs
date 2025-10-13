@@ -5,7 +5,7 @@ from __future__ import annotations
 
 import sys
 from collections import OrderedDict
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from .saxs_defaults import SaxsDefaults
 
@@ -35,7 +35,7 @@ from PySide6.QtGui import QPixmap, QClipboard
 class RequiredParametersWidget(QWidget):
     """Widget that holds the required parameters for the SAXS calculation."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         layout = QFormLayout(self)
         layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
@@ -105,14 +105,14 @@ class RequiredParametersWidget(QWidget):
         grid_and_frames_layout.addWidget(QLabel("Initial (-b):"))
         self.begin_spin = QSpinBox()
         self.begin_spin.setRange(
-            SaxsDefaults.GRID_SIZE_RANGE_MIN, SaxsDefaults.GRID_SIZE_RANGE_MAX)
+            SaxsDefaults.FRAME_RANGE_MIN, SaxsDefaults.FRAME_RANGE_MAX)
         self.begin_spin.setValue(SaxsDefaults.INITIAL_FRAME)
         grid_and_frames_layout.addWidget(self.begin_spin)
 
         grid_and_frames_layout.addWidget(QLabel("Last (-e):"))
         self.end_spin = QSpinBox()
         self.end_spin.setRange(
-            SaxsDefaults.GRID_SIZE_RANGE_MIN, SaxsDefaults.GRID_SIZE_RANGE_MAX)
+            SaxsDefaults.FRAME_RANGE_MIN, SaxsDefaults.FRAME_RANGE_MAX)
         self.end_spin.setValue(SaxsDefaults.LAST_FRAME)
         grid_and_frames_layout.addWidget(self.end_spin)
 
@@ -170,7 +170,7 @@ class RequiredParametersWidget(QWidget):
 class AdvancedParametersWidget(QWidget):
     """Widget that holds the advanced (optional) parameters."""
 
-    def __init__(self, parent: QWidget | None = None) -> None:
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
         layout = QFormLayout(self)
         layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)

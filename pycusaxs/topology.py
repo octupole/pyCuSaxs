@@ -16,6 +16,8 @@ Key Methods:
     read_frame(frame_number): Load a specific trajectory frame
 """
 #!/usr/bin/env python
+from __future__ import annotations
+
 import argparse
 import sys
 from typing import Dict, List, Tuple, Iterator, Optional
@@ -616,7 +618,8 @@ class Topology:
             raise RuntimeError("Call read_frame() before get_coordinates()")
         return self.ts.positions
 
-    def iter_frames_stream(self, start: int, stop: int, step: int = 1) -> Iterator[Dict]:
+    def iter_frames_stream(self, start: int, stop: int, step: int = 1,
+                          show_progress: bool = False) -> Iterator[Dict]:
         """
         Memory-efficient streaming iterator for large trajectories.
 
@@ -628,6 +631,7 @@ class Topology:
             start: Starting frame index (inclusive)
             stop: Stopping frame index (exclusive)
             step: Frame stride (default: 1, every frame)
+            show_progress: If True, display progress bar (default: False)
 
         Yields:
             dict: Frame data with keys:
@@ -641,7 +645,22 @@ class Topology:
             ...     coords = frame_data['positions']
             ...     # Process coords for SAXS calculation
         """
-        for ts in self.universe.trajectory[start:stop:step]:
+        trajectory = self.universe.trajectory[start:stop:step]
+
+        if show_progress:
+            try:
+                from .progress import iter_with_progress
+                n_frames = len(range(start, stop, step))
+                trajectory = iter_with_progress(
+                    trajectory,
+                    total=n_frames,
+                    desc="Reading frames",
+                    unit="frame"
+                )
+            except ImportError:
+                pass  # Progress module not available, continue without progress bar
+
+        for ts in trajectory:
             yield {
                 'frame': ts.frame,
                 'time': ts.time,

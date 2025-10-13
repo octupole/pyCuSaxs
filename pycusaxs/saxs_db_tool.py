@@ -28,7 +28,7 @@ def cmd_list(args):
         print(f"\n{'='*130}")
         print(f"SAXS Profiles in {args.db}")
         print(f"{'='*130}")
-        print(f"{'ID':<5} {'Water':<8} {'Ions':<15} {'Other Molecules':<20} {'Box (Å)':<20} {'Grid':<15} {'Supercell':<15} {'Time (ps)':<10}")
+        print(f"{'ID':<5} {'Water':<8} {'Ions':<15} {'Other Molecules':<20} {'Box (Å)':<20} {'Grid':<15} {'Supercell':<15} {'Time (ps)':<10} {'Density (g/cm³)':<18}")
         print(f"{'-'*130}")
 
         for profile in profiles:
@@ -53,6 +53,8 @@ def cmd_list(args):
             # Calculate supercell grid
             scale = profile['supercell_scale']
             supercell_str = f"{int(grid[0]*scale)}x{int(grid[1]*scale)}x{int(grid[2]*scale)}"
+            density = profile.get('density_g_cm3')
+            density_str = f"{density:.4f}" if density is not None else "N/A"
 
             print(f"{profile['id']:<5} "
                   f"{profile['water_model']:<8} "
@@ -61,7 +63,8 @@ def cmd_list(args):
                   f"{box_str:<20} "
                   f"{grid_str:<15} "
                   f"{supercell_str:<15} "
-                  f"{profile['simulation_time_ps']:<10.1f}")
+                  f"{profile['simulation_time_ps']:<10.1f} "
+                  f"{density_str:<18}")
 
         print(f"{'-'*130}\n")
         print(f"Total profiles: {len(profiles)}")
@@ -131,7 +134,7 @@ def cmd_info(args):
 
         print(f"\n--- System Properties ---")
         print(f"Total Atoms: {profile['n_atoms']}")
-        if profile['density_g_cm3']:
+        if profile.get('density_g_cm3') is not None:
             print(f"Density: {profile['density_g_cm3']:.4f} g/cm³")
 
         print(f"\n--- Profile Data ---")
@@ -179,7 +182,9 @@ def cmd_plot(args):
             f.write(f"# Grid: {profile['grid_size']}\n")
             f.write(f"# Supercell Scale: {profile['supercell_scale']:.4f}\n")
             f.write(f"# Simulation Time: {profile['simulation_time_ps']:.2f} ps\n")
-            f.write(f"# Density: {profile['density_g_cm3']:.4f} g/cm³\n")
+            density = profile.get('density_g_cm3')
+            density_str = f"{density:.4f}" if density is not None else "N/A"
+            f.write(f"# Density: {density_str} g/cm³\n")
             f.write(f"#\n")
             f.write(f"# q (Å⁻¹)    I(q)\n")
 

@@ -322,7 +322,9 @@ class SaxsDatabase:
             f.write(f"# Supercell Scale: {profile['supercell_scale']:.4f}\n")
             f.write(f"# Simulation Time: {profile['simulation_time_ps']:.2f} ps\n")
             f.write(f"# Frames Analyzed: {profile['n_frames_analyzed']}\n")
-            f.write(f"# Density: {profile['density_g_cm3']:.4f} g/cm³\n")
+            density = profile.get('density_g_cm3')
+            density_str = f"{density:.4f}" if density is not None else "N/A"
+            f.write(f"# Density: {density_str} g/cm³\n")
             f.write(f"#\n")
             f.write(f"# q (1/Å), I(q) (1/Å³)\n")
 

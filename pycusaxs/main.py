@@ -9,7 +9,7 @@ import os
 import io
 from contextlib import redirect_stdout, redirect_stderr
 from pathlib import Path
-from typing import Any, Dict, Iterable, List
+from typing import Any, Dict, Iterable, List, Tuple, Optional
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 from PySide6.QtCore import QObject, Signal, QTimer, QProcess
@@ -255,7 +255,7 @@ class SaxsMainWindow(SaxsParametersWindow):
             QMessageBox.critical(self, "Error", "Failed to start process")
 
 
-def _parse_grid_values(value: list) -> tuple[int, int, int]:
+def _parse_grid_values(value: List[int]) -> Tuple[int, int, int]:
 
     if len(value) == 1:
         return tuple([int(value[0])] * 3)
@@ -583,7 +583,7 @@ def _run_gui() -> int:
     return app.exec()
 
 
-def main(argv: List[str] | None = None) -> int:
+def main(argv: Optional[List[str]] = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
 
     if not argv:

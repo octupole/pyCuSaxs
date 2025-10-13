@@ -30,22 +30,64 @@ namespace
         try
         {
             // Input validation
-            if (grid.size() != 3)
+            if (grid.empty())
             {
-                throw std::invalid_argument("Grid must have exactly 3 dimensions (nx, ny, nz)");
+                throw std::invalid_argument("Grid must have at least one dimension");
             }
-            if (grid[0] <= 0 || grid[1] <= 0 || grid[2] <= 0)
+            if (grid.size() == 1)
             {
-                throw std::invalid_argument("Grid dimensions must be positive");
+                if (grid[0] <= 0)
+                {
+                    throw std::invalid_argument("Grid dimension must be positive");
+                }
             }
-            if (!scaled_grid.empty() && scaled_grid.size() != 3)
+            else if (grid.size() == 3)
             {
-                throw std::invalid_argument("Scaled grid must have exactly 3 dimensions or be empty");
+                if (grid[0] <= 0 || grid[1] <= 0 || grid[2] <= 0)
+                {
+                    throw std::invalid_argument("Grid dimensions must be positive");
+                }
             }
-            if (!scaled_grid.empty() && (scaled_grid[0] <= 0 || scaled_grid[1] <= 0 || scaled_grid[2] <= 0))
+            else
             {
-                throw std::invalid_argument("Scaled grid dimensions must be positive");
+                throw std::invalid_argument("Grid must have either 1 or 3 dimensions (nx, ny, nz)");
             }
+
+            std::vector<int> normalized_grid;
+            if (grid.size() == 1)
+            {
+                normalized_grid = std::vector<int>(3, grid[0]);
+            }
+            else
+            {
+                normalized_grid = grid;
+            }
+
+            std::vector<int> normalized_scaled_grid;
+            if (!scaled_grid.empty())
+            {
+                if (scaled_grid.size() == 1)
+                {
+                    if (scaled_grid[0] <= 0)
+                    {
+                        throw std::invalid_argument("Scaled grid dimension must be positive");
+                    }
+                    normalized_scaled_grid = std::vector<int>(3, scaled_grid[0]);
+                }
+                else if (scaled_grid.size() == 3)
+                {
+                    if (scaled_grid[0] <= 0 || scaled_grid[1] <= 0 || scaled_grid[2] <= 0)
+                    {
+                        throw std::invalid_argument("Scaled grid dimensions must be positive");
+                    }
+                    normalized_scaled_grid = scaled_grid;
+                }
+                else
+                {
+                    throw std::invalid_argument("Scaled grid must have either 1 or 3 dimensions");
+                }
+            }
+
             if (stride <= 0)
             {
                 throw std::invalid_argument("Stride must be positive");
@@ -62,25 +104,29 @@ namespace
             {
                 throw std::invalid_argument("Q cutoff must be non-negative");
             }
-            if (scale_factor <= 0.0)
+            if (scale_factor < 0.0)
             {
-                throw std::invalid_argument("Scale factor must be positive");
+                throw std::invalid_argument("Scale factor must be non-negative");
+            }
+            if (normalized_scaled_grid.empty() && scale_factor == 0.0)
+            {
+                throw std::invalid_argument("Scale factor must be positive when scaled grid is not provided");
             }
             if (begin < 0 || end < 0)
             {
                 throw std::invalid_argument("Frame indices must be non-negative");
             }
-            if (end > 0 && begin >= end)
+            if (begin > end)
             {
-                throw std::invalid_argument("Begin frame must be less than end frame");
+                throw std::invalid_argument("Begin frame must be less than or equal to end frame");
             }
 
             CudaSaxsConfig config;
 
             config.topology_path = topology;
             config.trajectory_path = trajectory;
-            config.grid_shape = grid;
-            config.scaled_grid_shape = scaled_grid;
+            config.grid_shape = normalized_grid;
+            config.scaled_grid_shape = normalized_scaled_grid;
             config.begin_frame = begin;
             config.end_frame = end;
             config.frame_stride = stride;
