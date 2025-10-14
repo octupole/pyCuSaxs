@@ -61,10 +61,10 @@ def interpolate_profile(q_ref: np.ndarray, iq_ref: np.ndarray,
     """
     if method == 'cubic':
         interpolator = interp1d(q_ref, iq_ref, kind='cubic',
-                               bounds_error=False, fill_value='extrapolate')
+                                bounds_error=False, fill_value='extrapolate')
     else:
         interpolator = interp1d(q_ref, iq_ref, kind='linear',
-                               bounds_error=False, fill_value='extrapolate')
+                                bounds_error=False, fill_value='extrapolate')
 
     return interpolator(q_target)
 
@@ -93,7 +93,8 @@ def get_scaling_factor() -> float:
     """
     while True:
         try:
-            scale_str = input("\nEnter scaling factor for reference subtraction: ").strip()
+            scale_str = input(
+                "\nEnter scaling factor for reference subtraction: ").strip()
             scale = float(scale_str)
             if scale > 0:
                 return scale
@@ -106,7 +107,7 @@ def get_scaling_factor() -> float:
 
 
 def subtract_profiles(user_profile: dict, ref_profile: dict,
-                     scale: float, interp_method: str = 'cubic') -> Tuple[np.ndarray, np.ndarray]:
+                      scale: float, interp_method: str = 'cubic') -> Tuple[np.ndarray, np.ndarray]:
     """
     Subtract scaled reference profile from user profile.
 
@@ -137,12 +138,15 @@ def subtract_profiles(user_profile: dict, ref_profile: dict,
         print(f"\nQ-grids match exactly ({len(q_user)} points)")
         iq_ref_interp = iq_ref
     else:
-        print(f"\nQ-grids differ: user has {len(q_user)} points, reference has {len(q_ref)} points")
+        print(
+            f"\nQ-grids differ: user has {len(q_user)} points, reference has {len(q_ref)} points")
         print(f"User q range: [{q_user[0]:.6f}, {q_user[-1]:.6f}] Å⁻¹")
         print(f"Reference q range: [{q_ref[0]:.6f}, {q_ref[-1]:.6f}] Å⁻¹")
-        print(f"Interpolating reference profile using {interp_method} interpolation...")
+        print(
+            f"Interpolating reference profile using {interp_method} interpolation...")
 
-        iq_ref_interp = interpolate_profile(q_ref, iq_ref, q_user, method=interp_method)
+        iq_ref_interp = interpolate_profile(
+            q_ref, iq_ref, q_user, method=interp_method)
 
     # Perform subtraction
     iq_subtracted = iq_user - scale * iq_ref_interp
@@ -151,7 +155,7 @@ def subtract_profiles(user_profile: dict, ref_profile: dict,
 
 
 def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
-                           user_profile: dict, ref_profile: dict, scale: float):
+                            user_profile: dict, ref_profile: dict, scale: float):
     """Save subtracted profile to file with metadata."""
     with open(output_path, 'w') as f:
         f.write("# SAXS Profile after Solvent Subtraction\n")
@@ -160,23 +164,28 @@ def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
         f.write(f"#   ID: {user_profile['id']}\n")
         f.write(f"#   Water Model: {user_profile['water_model']}\n")
         f.write(f"#   Grid: {user_profile['grid_size']}\n")
-        f.write(f"#   Supercell Scale: {user_profile['supercell_scale']:.4f}\n")
-        f.write(f"#   Box: {user_profile['box_x']:.3f} x {user_profile['box_y']:.3f} x {user_profile['box_z']:.3f} Å\n")
+        f.write(
+            f"#   Supercell Scale: {user_profile['supercell_scale']:.4f}\n")
+        f.write(
+            f"#   Box: {user_profile['box_x']:.3f} x {user_profile['box_y']:.3f} x {user_profile['box_z']:.3f} Å\n")
         f.write(f"#   Volume: {user_profile['box_volume']:.2f} Ų\n")
         user_density = _format_density(user_profile.get('density_g_cm3'))
         f.write(f"#   Density: {user_density} g/cm³\n")
-        f.write(f"#   Simulation Time: {user_profile['simulation_time_ps']:.2f} ps\n")
+        f.write(
+            f"#   Simulation Time: {user_profile['simulation_time_ps']:.2f} ps\n")
         f.write("#\n")
         f.write("# Reference Profile (subtracted):\n")
         f.write(f"#   ID: {ref_profile['id']}\n")
         f.write(f"#   Water Model: {ref_profile['water_model']}\n")
         f.write(f"#   Grid: {ref_profile['grid_size']}\n")
         f.write(f"#   Supercell Scale: {ref_profile['supercell_scale']:.4f}\n")
-        f.write(f"#   Box: {ref_profile['box_x']:.3f} x {ref_profile['box_y']:.3f} x {ref_profile['box_z']:.3f} Å\n")
+        f.write(
+            f"#   Box: {ref_profile['box_x']:.3f} x {ref_profile['box_y']:.3f} x {ref_profile['box_z']:.3f} Å\n")
         f.write(f"#   Volume: {ref_profile['box_volume']:.2f} Ų\n")
         ref_density = _format_density(ref_profile.get('density_g_cm3'))
         f.write(f"#   Density: {ref_density} g/cm³\n")
-        f.write(f"#   Simulation Time: {ref_profile['simulation_time_ps']:.2f} ps\n")
+        f.write(
+            f"#   Simulation Time: {ref_profile['simulation_time_ps']:.2f} ps\n")
         f.write(f"#   Scaling Factor: {scale:.6f}\n")
         f.write("#\n")
         f.write("# q (Å⁻¹)    I(q) [subtracted]\n")
@@ -209,15 +218,15 @@ Examples:
     )
 
     parser.add_argument("--db", required=True, type=str,
-                       help="Path to user database containing simulated profile")
+                        help="Path to user database containing simulated profile")
     parser.add_argument("--id", type=int,
-                       help="Profile ID from user database to process (interactive if not specified)")
+                        help="Profile ID from user database to process (interactive if not specified)")
     parser.add_argument("--ref-db", type=str,
-                       help="Path to reference database (default: package reference database)")
+                        help="Path to reference database (default: package reference database)")
     parser.add_argument("-o", "--output", type=str,
-                       help="Output file path (default: subtracted_<id>.dat)")
+                        help="Output file path (default: subtracted_<id>.dat)")
     parser.add_argument("--interp", choices=['linear', 'cubic'], default='cubic',
-                       help="Interpolation method if q-grids differ (default: cubic)")
+                        help="Interpolation method if q-grids differ (default: cubic)")
 
     args = parser.parse_args()
 
@@ -228,12 +237,14 @@ Examples:
         ref_db_path = SaxsDefaults.get_reference_database_path()
 
     if not ref_db_path.exists():
-        print(f"Error: Reference database not found: {ref_db_path}", file=sys.stderr)
+        print(
+            f"Error: Reference database not found: {ref_db_path}", file=sys.stderr)
         return 1
 
     user_db_path = Path(args.db).expanduser().resolve()
     if not user_db_path.exists():
-        print(f"Error: User database not found: {user_db_path}", file=sys.stderr)
+        print(
+            f"Error: User database not found: {user_db_path}", file=sys.stderr)
         return 1
 
     # Load and display simulated profiles from user database
@@ -251,7 +262,8 @@ Examples:
             # Verify the ID exists
             user_profile = user_db.get_profile(user_id)
             if not user_profile:
-                print(f"Error: Profile ID {user_id} not found in user database.", file=sys.stderr)
+                print(
+                    f"Error: Profile ID {user_id} not found in user database.", file=sys.stderr)
                 return 1
         else:
             # Interactive selection
@@ -262,18 +274,21 @@ Examples:
             )
             user_profile = user_db.get_profile(user_id)
             if not user_profile:
-                print(f"Error: Could not load profile {user_id}.", file=sys.stderr)
+                print(
+                    f"Error: Could not load profile {user_id}.", file=sys.stderr)
                 return 1
 
         print(f"\nSelected Simulated Profile {user_id}:")
         print(f"  Water Model: {user_profile['water_model']}")
         print(f"  Grid: {user_profile['grid_size']}")
         print(f"  Supercell Scale: {user_profile['supercell_scale']:.4f}")
-        print(f"  Box: {user_profile['box_x']:.3f} x {user_profile['box_y']:.3f} x {user_profile['box_z']:.3f} Å")
+        print(
+            f"  Box: {user_profile['box_x']:.3f} x {user_profile['box_y']:.3f} x {user_profile['box_z']:.3f} Å")
         print(f"  Volume: {user_profile['box_volume']:.2f} Ų")
         density_str = _format_density(user_profile.get('density_g_cm3'))
         print(f"  Density: {density_str} g/cm³")
-        print(f"  Simulation Time: {user_profile['simulation_time_ps']:.2f} ps")
+        print(
+            f"  Simulation Time: {user_profile['simulation_time_ps']:.2f} ps")
 
     # List reference profiles and get user selection
     print(f"\nReference database: {ref_db_path}")
@@ -292,17 +307,19 @@ Examples:
 
         ref_profile = ref_db.get_profile(ref_id)
         if not ref_profile:
-            print(f"Error: Could not load reference profile {ref_id}.", file=sys.stderr)
+            print(
+                f"Error: Could not load reference profile {ref_id}.", file=sys.stderr)
             return 1
 
     # Get scaling factor
     scale = get_scaling_factor()
 
-    print(f"\nSubtracting reference profile {ref_id} (scaled by {scale:.6f})...")
+    print(
+        f"\nSubtracting reference profile {ref_id} (scaled by {scale:.6f})...")
 
     # Perform subtraction
     q, iq_subtracted = subtract_profiles(user_profile, ref_profile, scale,
-                                        interp_method=args.interp)
+                                         interp_method=args.interp)
 
     # Determine output path
     if args.output:
@@ -312,7 +329,7 @@ Examples:
 
     # Save result
     save_subtracted_profile(output_path, q, iq_subtracted,
-                           user_profile, ref_profile, scale)
+                            user_profile, ref_profile, scale)
 
     print(f"\nSubtracted profile saved to: {output_path}")
     print(f"Data points: {len(q)}")
@@ -328,7 +345,8 @@ Examples:
     n_negative = np.sum(iq_subtracted < 0)
     if n_negative > 0:
         pct_negative = 100 * n_negative / len(iq_subtracted)
-        print(f"\nWarning: {n_negative} ({pct_negative:.1f}%) data points are negative.")
+        print(
+            f"\nWarning: {n_negative} ({pct_negative:.1f}%) data points are negative.")
         print(f"This may indicate over-subtraction (scaling factor too large).")
 
     return 0
