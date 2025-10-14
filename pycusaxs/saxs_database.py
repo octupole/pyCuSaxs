@@ -257,6 +257,27 @@ class SaxsDatabase:
 
         return None
 
+    def get_profile(self, profile_id: int) -> Optional[Dict]:
+        """
+        Get a specific profile by its database ID.
+
+        Args:
+            profile_id: Database ID of the profile
+
+        Returns:
+            Dictionary with profile data or None if not found
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT * FROM saxs_profiles WHERE id = ?
+        """, (profile_id,))
+
+        row = cursor.fetchone()
+        if row:
+            return self._row_to_dict(row)
+
+        return None
+
     def list_profiles(self, water_model: Optional[str] = None) -> List[Dict]:
         """
         List all profiles in database, optionally filtered by water model.
