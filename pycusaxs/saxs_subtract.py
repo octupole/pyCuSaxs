@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Interactive tool for subtracting reference solvent SAXS profiles from experimental profiles.
+Interactive tool for subtracting reference solvent SAXS profiles from simulated profiles.
 """
 
 import sys
@@ -84,36 +84,13 @@ def get_user_choice(prompt: str, min_val: int, max_val: int) -> int:
             sys.exit(0)
 
 
-def get_scaling_factor(user_profile: dict, ref_profile: dict, auto: bool = False) -> float:
+def get_scaling_factor() -> float:
     """
-    Get or calculate the scaling factor for subtraction.
-
-    Args:
-        user_profile: User's experimental profile
-        ref_profile: Reference solvent profile
-        auto: If True, auto-calculate from densities and volumes
+    Get the scaling factor for subtraction from user input.
 
     Returns:
         Scaling factor
     """
-    if auto:
-        # Estimate scaling from relative volumes and densities
-        user_vol = user_profile['box_volume']
-        ref_vol = ref_profile['box_volume']
-        user_dens = user_profile['density_g_cm3']
-        ref_dens = ref_profile['density_g_cm3']
-
-        # Scale by volume ratio (assuming same number of water molecules should scale with volume)
-        scale = user_vol / ref_vol if ref_vol > 0 else 1.0
-
-        print(f"\nAuto-calculated scaling factor: {scale:.6f}")
-        print(f"  Based on volume ratio: {user_vol:.2f} / {ref_vol:.2f} Ų")
-
-        response = input("Use this scaling factor? [Y/n]: ").strip().lower()
-        if response in ('', 'y', 'yes'):
-            return scale
-
-    # Manual input
     while True:
         try:
             scale_str = input("\nEnter scaling factor for reference subtraction: ").strip()
@@ -134,7 +111,7 @@ def subtract_profiles(user_profile: dict, ref_profile: dict,
     Subtract scaled reference profile from user profile.
 
     Args:
-        user_profile: User's experimental profile
+        user_profile: User's simulated profile
         ref_profile: Reference solvent profile
         scale: Scaling factor for reference
         interp_method: Interpolation method if grids differ
@@ -210,15 +187,18 @@ def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Subtract reference solvent SAXS profile from experimental profile",
+        description="Subtract reference solvent SAXS profile from simulated profile",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Interactive mode
+  # Interactive mode (choose profile ID interactively)
+  saxs-subtract --db my_data.db
+
+  # Specify profile ID directly
   saxs-subtract --db my_data.db --id 1
 
-  # Specify reference database and auto-calculate scaling
-  saxs-subtract --db my_data.db --id 1 --ref-db reference.db --auto-scale
+  # Specify reference database
+  saxs-subtract --db my_data.db --ref-db reference.db
 
   # Specify output file
   saxs-subtract --db my_data.db --id 1 -o subtracted.dat
@@ -229,15 +209,13 @@ Examples:
     )
 
     parser.add_argument("--db", required=True, type=str,
-                       help="Path to user database containing experimental profile")
-    parser.add_argument("--id", required=True, type=int,
-                       help="Profile ID from user database to process")
+                       help="Path to user database containing simulated profile")
+    parser.add_argument("--id", type=int,
+                       help="Profile ID from user database to process (interactive if not specified)")
     parser.add_argument("--ref-db", type=str,
                        help="Path to reference database (default: package reference database)")
     parser.add_argument("-o", "--output", type=str,
                        help="Output file path (default: subtracted_<id>.dat)")
-    parser.add_argument("--auto-scale", action="store_true",
-                       help="Auto-calculate scaling factor from volumes and densities")
     parser.add_argument("--interp", choices=['linear', 'cubic'], default='cubic',
                        help="Interpolation method if q-grids differ (default: cubic)")
 
@@ -258,15 +236,36 @@ Examples:
         print(f"Error: User database not found: {user_db_path}", file=sys.stderr)
         return 1
 
-    # Load user profile
-    print(f"\nLoading user profile from: {user_db_path}")
+    # Load and display simulated profiles from user database
+    print(f"\nLoading simulated profiles from: {user_db_path}")
     with SaxsDatabase(user_db_path) as user_db:
-        user_profile = user_db.get_profile(args.id)
-        if not user_profile:
-            print(f"Error: Profile ID {args.id} not found in user database.", file=sys.stderr)
+        user_profiles = list_profiles(user_db, "Available Simulated Profiles")
+
+        if not user_profiles:
+            print("\nError: No simulated profiles available.", file=sys.stderr)
             return 1
 
-        print(f"\nUser Profile {args.id}:")
+        # Get profile ID (from argument or interactively)
+        if args.id is not None:
+            user_id = args.id
+            # Verify the ID exists
+            user_profile = user_db.get_profile(user_id)
+            if not user_profile:
+                print(f"Error: Profile ID {user_id} not found in user database.", file=sys.stderr)
+                return 1
+        else:
+            # Interactive selection
+            user_id = get_user_choice(
+                f"\nSelect simulated profile ID to subtract from: ",
+                min(p['id'] for p in user_profiles),
+                max(p['id'] for p in user_profiles)
+            )
+            user_profile = user_db.get_profile(user_id)
+            if not user_profile:
+                print(f"Error: Could not load profile {user_id}.", file=sys.stderr)
+                return 1
+
+        print(f"\nSelected Simulated Profile {user_id}:")
         print(f"  Water Model: {user_profile['water_model']}")
         print(f"  Grid: {user_profile['grid_size']}")
         print(f"  Supercell Scale: {user_profile['supercell_scale']:.4f}")
@@ -297,7 +296,7 @@ Examples:
             return 1
 
     # Get scaling factor
-    scale = get_scaling_factor(user_profile, ref_profile, auto=args.auto_scale)
+    scale = get_scaling_factor()
 
     print(f"\nSubtracting reference profile {ref_id} (scaled by {scale:.6f})...")
 
@@ -309,7 +308,7 @@ Examples:
     if args.output:
         output_path = Path(args.output)
     else:
-        output_path = Path(f"subtracted_{args.id}.dat")
+        output_path = Path(f"subtracted_{user_id}.dat")
 
     # Save result
     save_subtracted_profile(output_path, q, iq_subtracted,
