@@ -154,9 +154,54 @@ def subtract_profiles(user_profile: dict, ref_profile: dict,
     return q_user, iq_subtracted
 
 
+def resample_profile(q: np.ndarray, iq: np.ndarray, dq: float,
+                     method: str = 'cubic') -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Resample profile to a uniform q-grid with specified spacing.
+
+    Args:
+        q: Original q values
+        iq: Original I(q) values
+        dq: Desired q spacing (Å⁻¹)
+        method: Interpolation method ('linear' or 'cubic')
+
+    Returns:
+        (q_resampled, iq_resampled) arrays
+    """
+    # Create uniform q-grid from min to max with spacing dq
+    q_min = q[0]
+    q_max = q[-1]
+    n_points = int(np.ceil((q_max - q_min) / dq)) + 1
+    q_uniform = np.linspace(q_min, q_max, n_points)
+
+    print(f"\nResampling profile to uniform grid:")
+    print(f"  Original points: {len(q)}")
+    print(f"  New dq: {dq:.6f} Å⁻¹")
+    print(f"  New points: {len(q_uniform)}")
+    print(f"  Q range: [{q_uniform[0]:.6f}, {q_uniform[-1]:.6f}] Å⁻¹")
+
+    # Interpolate I(q) to the uniform grid
+    iq_uniform = interpolate_profile(q, iq, q_uniform, method=method)
+
+    return q_uniform, iq_uniform
+
+
 def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
-                            user_profile: dict, ref_profile: dict, scale: float):
-    """Save subtracted profile to file with metadata."""
+                            user_profile: dict, ref_profile: dict, scale: float,
+                            resampled: bool = False, original_points: int = None):
+    """
+    Save subtracted profile to file with metadata.
+
+    Args:
+        output_path: Path to output file
+        q: q values
+        iq: I(q) values
+        user_profile: User profile dictionary
+        ref_profile: Reference profile dictionary
+        scale: Scaling factor used
+        resampled: Whether the profile was resampled
+        original_points: Number of points before resampling (if resampled)
+    """
     with open(output_path, 'w') as f:
         f.write("# SAXS Profile after Solvent Subtraction\n")
         f.write("#\n")
@@ -188,6 +233,12 @@ def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
             f"#   Simulation Time: {ref_profile['simulation_time_ps']:.2f} ps\n")
         f.write(f"#   Scaling Factor: {scale:.6f}\n")
         f.write("#\n")
+        if resampled and original_points is not None:
+            f.write("# Output Processing:\n")
+            f.write(f"#   Original data points: {original_points}\n")
+            f.write(f"#   Resampled to: {len(q)} points\n")
+            f.write(f"#   Q spacing (dq): {(q[1] - q[0]):.6f} Å⁻¹\n")
+            f.write("#\n")
         f.write("# q (Å⁻¹)    I(q) [subtracted]\n")
 
         for q_val, iq_val in zip(q, iq):
@@ -212,6 +263,9 @@ Examples:
   # Specify output file
   saxs-subtract --db my_data.db --id 1 -o subtracted.dat
 
+  # Resample to uniform q-grid with dq=0.01 Å⁻¹
+  saxs-subtract --db my_data.db --id 1 --dq 0.01
+
   # Use linear interpolation instead of cubic
   saxs-subtract --db my_data.db --id 1 --interp linear
         """
@@ -225,6 +279,8 @@ Examples:
                         help="Path to reference database (default: package reference database)")
     parser.add_argument("-o", "--output", type=str,
                         help="Output file path (default: subtracted_<id>.dat)")
+    parser.add_argument("--dq", type=float,
+                        help="Resample output to uniform q-grid with this spacing (Å⁻¹)")
     parser.add_argument("--interp", choices=['linear', 'cubic'], default='cubic',
                         help="Interpolation method if q-grids differ (default: cubic)")
 
@@ -321,6 +377,19 @@ Examples:
     q, iq_subtracted = subtract_profiles(user_profile, ref_profile, scale,
                                          interp_method=args.interp)
 
+    # Resample if --dq is specified
+    resampled = False
+    original_points = None
+    if args.dq is not None:
+        if args.dq <= 0:
+            print(f"Error: --dq must be positive (got {args.dq})", file=sys.stderr)
+            return 1
+
+        original_points = len(q)
+        q, iq_subtracted = resample_profile(q, iq_subtracted, args.dq,
+                                           method=args.interp)
+        resampled = True
+
     # Determine output path
     if args.output:
         output_path = Path(args.output)
@@ -329,7 +398,8 @@ Examples:
 
     # Save result
     save_subtracted_profile(output_path, q, iq_subtracted,
-                            user_profile, ref_profile, scale)
+                            user_profile, ref_profile, scale,
+                            resampled=resampled, original_points=original_points)
 
     print(f"\nSubtracted profile saved to: {output_path}")
     print(f"Data points: {len(q)}")
