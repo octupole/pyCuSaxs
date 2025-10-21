@@ -327,6 +327,7 @@ export LD_LIBRARY_PATH=$CUDA_HOME/lib64:$LD_LIBRARY_PATH
 - **Environment aware** - uses correct Python interpreter from activated environment
 
 For more information, see:
-- [README.md](../README.md) - General usage
-- [INSTALL.md](../INSTALL.md) - Installation guide
-- [docs/user-guide/](user-guide/) - Detailed usage documentation
+- [Installation Guide](getting-started/installation.md) - Installation guide
+- [Quick Start](getting-started/quickstart.md) - Getting started
+- [Command Line Interface](user-guide/cli.md) - CLI usage
+- [Graphical Interface](user-guide/gui.md) - GUI usage

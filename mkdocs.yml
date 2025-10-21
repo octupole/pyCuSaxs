@@ -120,6 +120,7 @@ nav:
     - Database Management: user-guide/database.md
     - Solvent Subtraction: user-guide/solvent-subtraction.md
     - Python API: user-guide/python-api.md
+    - Executable Scripts: SCRIPTS.md
   - Algorithm:
     - Overview: algorithm/overview.md
     - Pipeline: algorithm/pipeline.md
