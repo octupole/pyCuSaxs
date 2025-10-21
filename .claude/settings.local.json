@@ -19,7 +19,14 @@
       "Bash(python:*)",
       "Bash(sqlite3:*)",
       "Bash(saxs-db list:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(tree -L 3 -I 'build|lib|.git|.cache|.vscode|.zed' /home/marchi/tmp/pyCuSaxs)",
+      "Bash(/opt/miniforge3/envs/pycusaxs/bin/python -c \"import cupy; print(cupy.__version__)\")",
+      "Bash(/opt/miniforge3/envs/pycusaxs/bin/python -c \"import pycusaxs_cuda; print(''CUDA backend available'')\")",
+      "Bash(chmod +x /home/marchi/tmp/pyCuSaxs/bin/*)",
+      "Read(//opt/miniforge3/envs/pycusaxs/bin/**)",
+      "Bash(/opt/miniforge3/envs/pycusaxs/bin/pycusaxs --help)",
+      "Bash(/opt/miniforge3/envs/pycusaxs/bin/python /home/marchi/tmp/pyCuSaxs/bin/pycusaxs --help)"
     ],
     "deny": [],
     "ask": []

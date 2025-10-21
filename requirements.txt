@@ -3,3 +3,4 @@ MDAnalysis>=2.0
 networkx>=3.0
 numpy>=1.23
 tqdm>=4.65
+cupy-cuda12x>=12.0; platform_system=='Linux'

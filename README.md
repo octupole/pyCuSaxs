@@ -35,6 +35,8 @@
 
 ## 📦 Installation
 
+> **For detailed installation instructions, troubleshooting, and platform-specific guides, see [INSTALL.md](INSTALL.md)**
+
 ### Prerequisites
 
 **Hardware Requirements:**
@@ -49,39 +51,45 @@
 - NVIDIA driver compatible with your CUDA version
 - fmt library (header-only mode supported)
 
-### Method 1: Conda/Mamba Installation (Recommended)
+### Quick Start Installation
 
-Using conda/mamba ensures all C++ dependencies (fmt, CUDA libraries) are properly installed:
+**Method 1: Conda/Mamba (Recommended)**
+
+Using conda/mamba ensures all dependencies including CUDA and CuPy are properly installed:
 
 ```bash
-# Create conda environment with dependencies
-conda create -n pycusaxs python=3.11 cmake fmt pybind11 numpy
+# Create conda environment with all dependencies
+conda create -n pycusaxs python=3.11
 conda activate pycusaxs
 
-# Install Python dependencies
-pip install PySide6 MDAnalysis networkx
+# Install CUDA toolkit and build dependencies
+conda install -c conda-forge -c nvidia cuda-toolkit cmake pybind11 fmt scikit-build-core
 
-# Build and install pyCuSAXS
-pip install .
+# Clone and install pyCuSAXS with CuPy
+git clone <your-repo-url>
+cd pyCuSaxs
+pip install -e ".[cuda12]"  # For CUDA 12.x, or use .[cuda11] for CUDA 11.x
 ```
 
-### Method 2: Standard Installation (pip + system packages)
+**Method 2: Pip Installation**
 
-If you have fmt and CUDA installed system-wide:
+If you have CUDA toolkit installed system-wide:
 
 ```bash
-# Create and activate virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Ensure CUDA is in your PATH
+export CUDA_HOME=/usr/local/cuda
+export PATH=$CUDA_HOME/bin:$PATH
 
-# Install Python dependencies
-pip install -r requirements.txt
-
-# Build and install pyCuSAXS
-pip install .
+# Clone and install
+git clone <your-repo-url>
+cd pyCuSaxs
+pip install -e ".[cuda12]"  # Installs all dependencies including CuPy
 ```
 
-**Note:** If you encounter library loading errors, you may need to set `LD_LIBRARY_PATH` (see [Troubleshooting](#troubleshooting)).
+**Important Notes:**
+- CuPy is now automatically installed as a dependency
+- The build process checks for CUDA availability and provides helpful error messages
+- See [INSTALL.md](INSTALL.md) for troubleshooting common installation issues
 
 ### Method 3: Development Installation
 

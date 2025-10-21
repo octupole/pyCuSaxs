@@ -19,6 +19,7 @@ dependencies = [
     "networkx>=3.0",
     "numpy>=1.23",
     "tqdm>=4.65",
+    "cupy-cuda12x>=12.0; platform_system=='Linux'",
 ]
 
 [project.scripts]
@@ -27,8 +28,16 @@ saxs-widget = "pycusaxs.main:main"
 saxs-db = "pycusaxs.saxs_db_tool:main"
 saxs-subtract = "pycusaxs.saxs_subtract:main"
 
+[project.optional-dependencies]
+cuda11 = ["cupy-cuda11x>=11.0"]
+cuda12 = ["cupy-cuda12x>=12.0"]
+
 [tool.scikit-build]
 minimum-version = "0.7"
 wheel.packages = ["pycusaxs"]
 cmake.build-type = "Release"
 cmake.source-dir = "."
+cmake.verbose = true
+
+[tool.scikit-build.cmake.define]
+CUSAXS_CHECK_CUDA = "ON"
