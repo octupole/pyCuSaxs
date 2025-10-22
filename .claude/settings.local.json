@@ -26,7 +26,9 @@
       "Bash(chmod +x /home/marchi/tmp/pyCuSaxs/bin/*)",
       "Read(//opt/miniforge3/envs/pycusaxs/bin/**)",
       "Bash(/opt/miniforge3/envs/pycusaxs/bin/pycusaxs --help)",
-      "Bash(/opt/miniforge3/envs/pycusaxs/bin/python /home/marchi/tmp/pyCuSaxs/bin/pycusaxs --help)"
+      "Bash(/opt/miniforge3/envs/pycusaxs/bin/python /home/marchi/tmp/pyCuSaxs/bin/pycusaxs --help)",
+      "Bash(tree:*)",
+      "Read(//home/marchi/**)"
     ],
     "deny": [],
     "ask": []
