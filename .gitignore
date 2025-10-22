@@ -55,6 +55,8 @@ export/
 !CMakeLists.txt
 !requirements.txt
 !requirements.testing.txt
+!c18-1-00-100.dat
+!difference.dat
 
 
 # MkDocs

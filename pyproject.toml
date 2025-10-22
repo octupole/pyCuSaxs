@@ -1,8 +1,8 @@
 [build-system]
 requires = [
-    "scikit-build-core[pyproject]>=0.7.0",
-    "pybind11>=2.11",
-    "numpy>=1.23",
+  "scikit-build-core[pyproject]>=0.7.0",
+  "pybind11>=2.11",
+  "numpy>=1.23",
 ]
 build-backend = "scikit_build_core.build"
 
@@ -14,12 +14,12 @@ readme = "README.md"
 requires-python = ">=3.9"
 authors = [{ name = "pyCuSaxs Authors" }]
 dependencies = [
-    "PySide6>=6.7",
-    "MDAnalysis>=2.0",
-    "networkx>=3.0",
-    "numpy>=1.23",
-    "tqdm>=4.65",
-    "cupy-cuda12x>=12.0; platform_system=='Linux'",
+  "PySide6>=6.7",
+  "MDAnalysis>=2.0",
+  "networkx>=3.0",
+  "numpy>=1.23",
+  "tqdm>=4.65",
+  "cupy-cuda12x>=12.0; platform_system=='Linux'",
 ]
 
 [project.scripts]
@@ -31,6 +31,7 @@ saxs-subtract = "pycusaxs.saxs_subtract:main"
 [project.optional-dependencies]
 cuda11 = ["cupy-cuda11x>=11.0"]
 cuda12 = ["cupy-cuda12x>=12.0"]
+fit = ["scipy>=1.9", "matplotlib>=3.6"]
 
 [tool.scikit-build]
 minimum-version = "0.7"
