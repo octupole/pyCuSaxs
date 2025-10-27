@@ -28,8 +28,8 @@ def list_profiles(db: SaxsDatabase, title: str) -> List[dict]:
         return []
 
     print(f"\n{title}:")
-    print(f"{'ID':<5} {'Water Model':<15} {'Grid':<15} {'Supercell':<15} {'Time (ps)':<12} {'Density (g/cm³)':<18}")
-    print("-" * 100)
+    print(f"{'ID':<5} {'Water':<8} {'Ions':<20} {'Other Molecules':<25} {'Grid':<13} {'Supercell':<13} {'Time (ps)':<11} {'Density':<10}")
+    print("-" * 130)
 
     for profile in profiles:
         grid = profile['grid_size']
@@ -38,9 +38,26 @@ def list_profiles(db: SaxsDatabase, title: str) -> List[dict]:
         scale = profile['supercell_scale']
         supercell_str = f"{int(grid[0]*scale)}x{int(grid[1]*scale)}x{int(grid[2]*scale)}"
 
+        # Format ions
+        ion_counts = profile.get('ion_counts', {})
+        if ion_counts:
+            ion_str = ', '.join([f"{k}:{v}" for k, v in ion_counts.items() if v > 0])
+            if not ion_str:
+                ion_str = "none"
+        else:
+            ion_str = "none"
+
+        # Format other molecules
+        other_mols = profile.get('other_molecules', {})
+        if other_mols:
+            mol_str = ', '.join([f"{k}:{v}" for k, v in other_mols.items()])[:24]  # Truncate if too long
+        else:
+            mol_str = "none"
+
         density_str = _format_density(profile.get('density_g_cm3'))
-        print(f"{profile['id']:<5} {profile['water_model']:<15} {grid_str:<15} {supercell_str:<15} "
-              f"{profile['simulation_time_ps']:<12.2f} {density_str:<18}")
+
+        print(f"{profile['id']:<5} {profile['water_model']:<8} {ion_str:<20} {mol_str:<25} "
+              f"{grid_str:<13} {supercell_str:<13} {profile['simulation_time_ps']:<11.2f} {density_str:<10}")
 
     return profiles
 
@@ -208,6 +225,23 @@ def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
         f.write("# User Profile:\n")
         f.write(f"#   ID: {user_profile['id']}\n")
         f.write(f"#   Water Model: {user_profile['water_model']}\n")
+
+        # Write ions for user profile
+        user_ions = user_profile.get('ion_counts', {})
+        if user_ions:
+            ions_str = ', '.join([f"{k}: {v}" for k, v in user_ions.items() if v > 0])
+            f.write(f"#   Ions: {ions_str if ions_str else 'none'}\n")
+        else:
+            f.write(f"#   Ions: none\n")
+
+        # Write other molecules for user profile
+        user_other = user_profile.get('other_molecules', {})
+        if user_other:
+            mols_str = ', '.join([f"{k}: {v}" for k, v in user_other.items()])
+            f.write(f"#   Other Molecules: {mols_str}\n")
+        else:
+            f.write(f"#   Other Molecules: none\n")
+
         f.write(f"#   Grid: {user_profile['grid_size']}\n")
         f.write(
             f"#   Supercell Scale: {user_profile['supercell_scale']:.4f}\n")
@@ -222,6 +256,23 @@ def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
         f.write("# Reference Profile (subtracted):\n")
         f.write(f"#   ID: {ref_profile['id']}\n")
         f.write(f"#   Water Model: {ref_profile['water_model']}\n")
+
+        # Write ions for reference profile
+        ref_ions = ref_profile.get('ion_counts', {})
+        if ref_ions:
+            ions_str = ', '.join([f"{k}: {v}" for k, v in ref_ions.items() if v > 0])
+            f.write(f"#   Ions: {ions_str if ions_str else 'none'}\n")
+        else:
+            f.write(f"#   Ions: none\n")
+
+        # Write other molecules for reference profile
+        ref_other = ref_profile.get('other_molecules', {})
+        if ref_other:
+            mols_str = ', '.join([f"{k}: {v}" for k, v in ref_other.items()])
+            f.write(f"#   Other Molecules: {mols_str}\n")
+        else:
+            f.write(f"#   Other Molecules: none\n")
+
         f.write(f"#   Grid: {ref_profile['grid_size']}\n")
         f.write(f"#   Supercell Scale: {ref_profile['supercell_scale']:.4f}\n")
         f.write(
@@ -336,6 +387,26 @@ Examples:
 
         print(f"\nSelected Simulated Profile {user_id}:")
         print(f"  Water Model: {user_profile['water_model']}")
+
+        # Show ions
+        ion_counts = user_profile.get('ion_counts', {})
+        if ion_counts:
+            ions_list = [f"{k}: {v}" for k, v in ion_counts.items() if v > 0]
+            if ions_list:
+                print(f"  Ions: {', '.join(ions_list)}")
+            else:
+                print(f"  Ions: none")
+        else:
+            print(f"  Ions: none")
+
+        # Show other molecules
+        other_mols = user_profile.get('other_molecules', {})
+        if other_mols:
+            mols_list = [f"{k}: {v}" for k, v in other_mols.items()]
+            print(f"  Other Molecules: {', '.join(mols_list)}")
+        else:
+            print(f"  Other Molecules: none")
+
         print(f"  Grid: {user_profile['grid_size']}")
         print(f"  Supercell Scale: {user_profile['supercell_scale']:.4f}")
         print(
