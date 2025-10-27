@@ -124,21 +124,30 @@ def get_scaling_factor() -> float:
 
 
 def subtract_profiles(user_profile: dict, ref_profile: dict,
-                      scale: float, interp_method: str = 'cubic',
-                      qmin: float = None, qmax: float = None) -> Tuple[np.ndarray, np.ndarray]:
+                      scale: float, interp_method: str = 'cubic') -> Tuple[np.ndarray, np.ndarray]:
     """
     Subtract scaled reference profile from user profile.
+
+    Subtraction is performed only in the overlap region of both profiles.
+    Points outside the overlap region remain unchanged from the user profile.
 
     Args:
         user_profile: User's simulated profile
         ref_profile: Reference solvent profile
         scale: Scaling factor for reference
         interp_method: Interpolation method if grids differ
-        qmin: Minimum q for subtraction window (default: first point)
-        qmax: Maximum q for subtraction window (default: 1.5 Å⁻¹)
 
     Returns:
-        (q, I_subtracted) arrays
+        (q, I_subtracted) arrays for the full user q-range
+
+    Note:
+        The subtraction window is automatically determined as the overlap region:
+        - qmin = max(q_user_min, q_ref_min)
+        - qmax = min(q_user_max, q_ref_max)
+
+        For example, if reference extends to q=2.0 and user to q=3.0:
+        - Subtraction is performed in [q_min, 2.0]
+        - Points beyond q=2.0 remain unchanged from user profile
     """
     # Extract profiles
     user_data = np.array(user_profile['profile_data'])
@@ -150,22 +159,27 @@ def subtract_profiles(user_profile: dict, ref_profile: dict,
     q_ref = ref_data[:, 0]
     iq_ref = ref_data[:, 1]
 
-    # Set default q-window
-    if qmin is None:
-        qmin = q_user[0]
-    if qmax is None:
-        qmax = 1.5
+    # Determine overlap region between user and reference profiles
+    overlap_qmin = max(q_user[0], q_ref[0])
+    overlap_qmax = min(q_user[-1], q_ref[-1])
 
-    # Apply q-window
-    mask = (q_user >= qmin) & (q_user <= qmax)
-    n_window = np.sum(mask)
+    print(f"\nProfile q-ranges:")
+    print(f"  User profile:      [{q_user[0]:.6f}, {q_user[-1]:.6f}] Å⁻¹")
+    print(f"  Reference profile: [{q_ref[0]:.6f}, {q_ref[-1]:.6f}] Å⁻¹")
+    print(f"  Overlap region:    [{overlap_qmin:.6f}, {overlap_qmax:.6f}] Å⁻¹")
+
+    if overlap_qmax <= overlap_qmin:
+        raise ValueError("No overlap between user and reference q-ranges!")
+
+    # Subtraction will be applied to the full overlap region
+    mask = (q_user >= overlap_qmin) & (q_user <= overlap_qmax)
+    n_overlap = np.sum(mask)
     n_total = len(q_user)
 
-    if n_window == 0:
-        raise ValueError(f"No data points in q-window [{qmin:.4f}, {qmax:.4f}] Å⁻¹")
-
-    print(f"\nSubtraction q-window: [{qmin:.6f}, {qmax:.6f}] Å⁻¹")
-    print(f"Points in window: {n_window}/{n_total} ({100*n_window/n_total:.1f}%)")
+    print(f"\nSubtraction applied to overlap region: [{overlap_qmin:.6f}, {overlap_qmax:.6f}] Å⁻¹")
+    print(f"Points in overlap: {n_overlap}/{n_total} ({100*n_overlap/n_total:.1f}%)")
+    if n_overlap < n_total:
+        print(f"Points outside overlap ({n_total - n_overlap}) will remain unchanged")
 
     # Check if grids match
     grids_match = (len(q_user) == len(q_ref) and
@@ -177,18 +191,16 @@ def subtract_profiles(user_profile: dict, ref_profile: dict,
     else:
         print(
             f"\nQ-grids differ: user has {len(q_user)} points, reference has {len(q_ref)} points")
-        print(f"User q range: [{q_user[0]:.6f}, {q_user[-1]:.6f}] Å⁻¹")
-        print(f"Reference q range: [{q_ref[0]:.6f}, {q_ref[-1]:.6f}] Å⁻¹")
-        print(
-            f"Interpolating reference profile using {interp_method} interpolation...")
+        print(f"Interpolating reference profile using {interp_method} interpolation...")
 
         iq_ref_interp = interpolate_profile(
             q_ref, iq_ref, q_user, method=interp_method)
 
-    # Perform subtraction only in the specified q-window
+    # Perform subtraction only in the overlap region
     iq_subtracted = iq_user.copy()
     iq_subtracted[mask] = iq_user[mask] - scale * iq_ref_interp[mask]
 
+    # Return full user profile with subtraction applied in overlap region
     return q_user, iq_subtracted
 
 
@@ -226,8 +238,7 @@ def resample_profile(q: np.ndarray, iq: np.ndarray, dq: float,
 
 def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
                             user_profile: dict, ref_profile: dict, scale: float,
-                            resampled: bool = False, original_points: int = None,
-                            qmin: float = None, qmax: float = None):
+                            resampled: bool = False, original_points: int = None):
     """
     Save subtracted profile to file with metadata.
 
@@ -240,8 +251,6 @@ def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
         scale: Scaling factor used
         resampled: Whether the profile was resampled
         original_points: Number of points before resampling (if resampled)
-        qmin: Minimum q for subtraction window
-        qmax: Maximum q for subtraction window
     """
     with open(output_path, 'w') as f:
         f.write("# SAXS Profile after Solvent Subtraction\n")
@@ -309,10 +318,7 @@ def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
         f.write("#\n")
         f.write("# Subtraction Parameters:\n")
         f.write(f"#   Scaling Factor: {scale:.6f}\n")
-        if qmin is not None or qmax is not None:
-            qmin_str = f"{qmin:.6f}" if qmin is not None else "first point"
-            qmax_str = f"{qmax:.6f}" if qmax is not None else "last point"
-            f.write(f"#   Q-window: [{qmin_str}, {qmax_str}] Å⁻¹\n")
+        f.write(f"#   Note: Subtraction applied only in overlap region between profiles\n")
         f.write("#\n")
         if resampled and original_points is not None:
             f.write("# Output Processing:\n")
@@ -344,17 +350,16 @@ Examples:
   # Specify output file
   saxs-subtract --db my_data.db --id 1 -o subtracted.dat
 
-  # Limit subtraction to q-range [0.01, 1.0] Å⁻¹
-  saxs-subtract --db my_data.db --id 1 --qmin 0.01 --qmax 1.0
-
-  # Use default q-window (start to 1.5 Å⁻¹)
-  saxs-subtract --db my_data.db --id 1
-
   # Resample to uniform q-grid with dq=0.01 Å⁻¹
   saxs-subtract --db my_data.db --id 1 --dq 0.01
 
   # Use linear interpolation instead of cubic
   saxs-subtract --db my_data.db --id 1 --interp linear
+
+Note:
+  Subtraction is automatically applied to the overlap region between user and
+  reference profiles. If reference extends to q=2.0 and user to q=3.0, subtraction
+  is performed up to q=2.0, with points beyond remaining unchanged.
         """
     )
 
@@ -370,10 +375,6 @@ Examples:
                         help="Resample output to uniform q-grid with this spacing (Å⁻¹)")
     parser.add_argument("--interp", choices=['linear', 'cubic'], default='cubic',
                         help="Interpolation method if q-grids differ (default: cubic)")
-    parser.add_argument("--qmin", type=float,
-                        help="Minimum q for subtraction window (default: first data point)")
-    parser.add_argument("--qmax", type=float, default=1.5,
-                        help="Maximum q for subtraction window (default: 1.5 Å⁻¹)")
 
     args = parser.parse_args()
 
@@ -486,8 +487,7 @@ Examples:
 
     # Perform subtraction
     q, iq_subtracted = subtract_profiles(user_profile, ref_profile, scale,
-                                         interp_method=args.interp,
-                                         qmin=args.qmin, qmax=args.qmax)
+                                         interp_method=args.interp)
 
     # Resample if --dq is specified
     resampled = False
@@ -511,8 +511,7 @@ Examples:
     # Save result
     save_subtracted_profile(output_path, q, iq_subtracted,
                             user_profile, ref_profile, scale,
-                            resampled=resampled, original_points=original_points,
-                            qmin=args.qmin, qmax=args.qmax)
+                            resampled=resampled, original_points=original_points)
 
     print(f"\nSubtracted profile saved to: {output_path}")
     print(f"Data points: {len(q)}")
