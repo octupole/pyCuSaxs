@@ -3,11 +3,19 @@
 Command-line tool for managing SAXS profile database.
 
 Usage:
-    saxs-db [--db DATABASE] list [--water-model MODEL]
-    saxs-db [--db DATABASE] info ID
-    saxs-db [--db DATABASE] export ID OUTPUT.csv
-    saxs-db [--db DATABASE] plot ID OUTPUT.dat
+    saxs-db [--db DATABASE | --use-reference] list [--water-model MODEL]
+    saxs-db [--db DATABASE | --use-reference] info ID
+    saxs-db [--db DATABASE | --use-reference] export ID OUTPUT.csv
+    saxs-db [--db DATABASE | --use-reference] plot ID OUTPUT.dat
     saxs-db [--db DATABASE] delete ID [ID ...] [-y]
+
+Options:
+    --db DATABASE        Use custom database file path
+    --use-reference      Use the reference solvent database (read-only)
+                        Located at: <env>/lib/python3.x/site-packages/pycusaxs/data/reference_solvents.db
+
+Note: The reference database contains validated reference solvent SAXS profiles.
+      Deletion is not allowed from the reference database.
 """
 
 import argparse
@@ -197,6 +205,13 @@ def cmd_plot(args):
 
 def cmd_delete(args):
     """Delete one or more profiles from the database."""
+    # Safety check: prevent deletion from reference database
+    ref_db_path = str(SaxsDefaults.get_reference_database_path())
+    if args.db == ref_db_path:
+        print("ERROR: Cannot delete profiles from reference database.", file=sys.stderr)
+        print("The reference database is read-only and contains reference solvent profiles.", file=sys.stderr)
+        return 1
+
     with SaxsDatabase(args.db) as db:
         cursor = db.conn.cursor()
 
@@ -241,10 +256,17 @@ def main():
     )
 
     default_db = str(SaxsDefaults.get_user_database_path())
+    ref_db = str(SaxsDefaults.get_reference_database_path())
+
     parser.add_argument(
         "--db",
         default=default_db,
         help=f"Database file path (default: {default_db})"
+    )
+    parser.add_argument(
+        "--use-reference",
+        action="store_true",
+        help=f"Use reference solvent database instead of user database (located at {ref_db})"
     )
 
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -281,6 +303,11 @@ def main():
     if not args.command:
         parser.print_help()
         return 1
+
+    # Override database path if --use-reference is specified
+    if args.use_reference:
+        args.db = ref_db
+        print(f"Using reference database: {args.db}\n")
 
     if args.command == "list":
         cmd_list(args)
