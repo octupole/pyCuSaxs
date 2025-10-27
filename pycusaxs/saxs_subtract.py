@@ -124,7 +124,8 @@ def get_scaling_factor() -> float:
 
 
 def subtract_profiles(user_profile: dict, ref_profile: dict,
-                      scale: float, interp_method: str = 'cubic') -> Tuple[np.ndarray, np.ndarray]:
+                      scale: float, interp_method: str = 'cubic',
+                      qmin: float = None, qmax: float = None) -> Tuple[np.ndarray, np.ndarray]:
     """
     Subtract scaled reference profile from user profile.
 
@@ -133,6 +134,8 @@ def subtract_profiles(user_profile: dict, ref_profile: dict,
         ref_profile: Reference solvent profile
         scale: Scaling factor for reference
         interp_method: Interpolation method if grids differ
+        qmin: Minimum q for subtraction window (default: first point)
+        qmax: Maximum q for subtraction window (default: 1.5 Å⁻¹)
 
     Returns:
         (q, I_subtracted) arrays
@@ -147,12 +150,29 @@ def subtract_profiles(user_profile: dict, ref_profile: dict,
     q_ref = ref_data[:, 0]
     iq_ref = ref_data[:, 1]
 
+    # Set default q-window
+    if qmin is None:
+        qmin = q_user[0]
+    if qmax is None:
+        qmax = 1.5
+
+    # Apply q-window
+    mask = (q_user >= qmin) & (q_user <= qmax)
+    n_window = np.sum(mask)
+    n_total = len(q_user)
+
+    if n_window == 0:
+        raise ValueError(f"No data points in q-window [{qmin:.4f}, {qmax:.4f}] Å⁻¹")
+
+    print(f"\nSubtraction q-window: [{qmin:.6f}, {qmax:.6f}] Å⁻¹")
+    print(f"Points in window: {n_window}/{n_total} ({100*n_window/n_total:.1f}%)")
+
     # Check if grids match
     grids_match = (len(q_user) == len(q_ref) and
                    np.allclose(q_user, q_ref, rtol=1e-6))
 
     if grids_match:
-        print(f"\nQ-grids match exactly ({len(q_user)} points)")
+        print(f"Q-grids match exactly ({len(q_user)} points)")
         iq_ref_interp = iq_ref
     else:
         print(
@@ -165,8 +185,9 @@ def subtract_profiles(user_profile: dict, ref_profile: dict,
         iq_ref_interp = interpolate_profile(
             q_ref, iq_ref, q_user, method=interp_method)
 
-    # Perform subtraction
-    iq_subtracted = iq_user - scale * iq_ref_interp
+    # Perform subtraction only in the specified q-window
+    iq_subtracted = iq_user.copy()
+    iq_subtracted[mask] = iq_user[mask] - scale * iq_ref_interp[mask]
 
     return q_user, iq_subtracted
 
@@ -205,7 +226,8 @@ def resample_profile(q: np.ndarray, iq: np.ndarray, dq: float,
 
 def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
                             user_profile: dict, ref_profile: dict, scale: float,
-                            resampled: bool = False, original_points: int = None):
+                            resampled: bool = False, original_points: int = None,
+                            qmin: float = None, qmax: float = None):
     """
     Save subtracted profile to file with metadata.
 
@@ -218,6 +240,8 @@ def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
         scale: Scaling factor used
         resampled: Whether the profile was resampled
         original_points: Number of points before resampling (if resampled)
+        qmin: Minimum q for subtraction window
+        qmax: Maximum q for subtraction window
     """
     with open(output_path, 'w') as f:
         f.write("# SAXS Profile after Solvent Subtraction\n")
@@ -282,7 +306,13 @@ def save_subtracted_profile(output_path: Path, q: np.ndarray, iq: np.ndarray,
         f.write(f"#   Density: {ref_density} g/cm³\n")
         f.write(
             f"#   Simulation Time: {ref_profile['simulation_time_ps']:.2f} ps\n")
+        f.write("#\n")
+        f.write("# Subtraction Parameters:\n")
         f.write(f"#   Scaling Factor: {scale:.6f}\n")
+        if qmin is not None or qmax is not None:
+            qmin_str = f"{qmin:.6f}" if qmin is not None else "first point"
+            qmax_str = f"{qmax:.6f}" if qmax is not None else "last point"
+            f.write(f"#   Q-window: [{qmin_str}, {qmax_str}] Å⁻¹\n")
         f.write("#\n")
         if resampled and original_points is not None:
             f.write("# Output Processing:\n")
@@ -314,6 +344,12 @@ Examples:
   # Specify output file
   saxs-subtract --db my_data.db --id 1 -o subtracted.dat
 
+  # Limit subtraction to q-range [0.01, 1.0] Å⁻¹
+  saxs-subtract --db my_data.db --id 1 --qmin 0.01 --qmax 1.0
+
+  # Use default q-window (start to 1.5 Å⁻¹)
+  saxs-subtract --db my_data.db --id 1
+
   # Resample to uniform q-grid with dq=0.01 Å⁻¹
   saxs-subtract --db my_data.db --id 1 --dq 0.01
 
@@ -334,6 +370,10 @@ Examples:
                         help="Resample output to uniform q-grid with this spacing (Å⁻¹)")
     parser.add_argument("--interp", choices=['linear', 'cubic'], default='cubic',
                         help="Interpolation method if q-grids differ (default: cubic)")
+    parser.add_argument("--qmin", type=float,
+                        help="Minimum q for subtraction window (default: first data point)")
+    parser.add_argument("--qmax", type=float, default=1.5,
+                        help="Maximum q for subtraction window (default: 1.5 Å⁻¹)")
 
     args = parser.parse_args()
 
@@ -446,7 +486,8 @@ Examples:
 
     # Perform subtraction
     q, iq_subtracted = subtract_profiles(user_profile, ref_profile, scale,
-                                         interp_method=args.interp)
+                                         interp_method=args.interp,
+                                         qmin=args.qmin, qmax=args.qmax)
 
     # Resample if --dq is specified
     resampled = False
@@ -470,7 +511,8 @@ Examples:
     # Save result
     save_subtracted_profile(output_path, q, iq_subtracted,
                             user_profile, ref_profile, scale,
-                            resampled=resampled, original_points=original_points)
+                            resampled=resampled, original_points=original_points,
+                            qmin=args.qmin, qmax=args.qmax)
 
     print(f"\nSubtracted profile saved to: {output_path}")
     print(f"Data points: {len(q)}")
