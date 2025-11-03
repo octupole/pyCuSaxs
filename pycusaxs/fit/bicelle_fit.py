@@ -4,13 +4,14 @@
 Features
  - Physically motivated parameterization for elliptical bicelle structures
  - Automatic initialization from data features
- - Global search (differential evolution) followed by local refinement
+ - Global search (CMA-ES or differential evolution) followed by local refinement
  - Weighted least-squares by default; optional log-residual objective
  - Optional plotting and export of the fitted curve
 
 Usage
 -----
 python -m pycusaxs.fit.bicelle_fit -f data.dat -p -o fit.dat
+python -m pycusaxs.fit.bicelle_fit -f data.dat --optimizer de  # use DE instead
 """
 
 from __future__ import annotations
@@ -21,6 +22,12 @@ from typing import Tuple, List, Optional, Sequence
 
 import numpy as np
 from scipy.optimize import differential_evolution, least_squares
+
+try:
+    import cma
+    HAS_CMA = True
+except ImportError:
+    HAS_CMA = False
 
 from .bicelle_model import (
     bicelle_intensity,
@@ -120,11 +127,41 @@ def fit_bicelle(
     init_guess: Optional[Tuple] = None,
     bounds: Optional[BicelleBounds] = None,
     mask: Optional[np.ndarray] = None,
+    optimizer: str = 'cma',
+    sigma0: float = 0.3,
+    maxfevals: int = 2000,
+    cma_verbose: bool = False,
 ):
     """
     Fit core_shell_bicelle_elliptical model to (q, y).
 
-    Returns a dict with parameters and diagnostics.
+    Parameters
+    ----------
+    q : array
+        Scattering vector values
+    y : array
+        Intensity values
+    use_logspace : bool
+        Use log-space residuals in Stage 2
+    init_guess : tuple, optional
+        Initial parameter guess (8 parameters)
+    bounds : BicelleBounds, optional
+        Parameter bounds
+    mask : array, optional
+        Boolean mask for q, y selection
+    optimizer : str
+        Global optimizer: 'cma' (default) or 'de'
+    sigma0 : float
+        Initial step size for CMA-ES (default: 0.3)
+    maxfevals : int
+        Maximum function evaluations for CMA-ES (default: 2000)
+    cma_verbose : bool
+        Show detailed CMA-ES progress
+
+    Returns
+    -------
+    dict
+        Fit results with parameters and diagnostics
     """
     if bounds is None:
         bounds = BicelleBounds()
@@ -135,6 +172,11 @@ def fit_bicelle(
         mask = np.asarray(mask, dtype=bool)
         q = q[mask]
         y = y[mask]
+
+    # Check optimizer availability
+    if optimizer == 'cma' and not HAS_CMA:
+        print("Warning: CMA-ES requested but 'cma' package not available. Falling back to DE.", flush=True)
+        optimizer = 'de'
 
     # Initial guess
     if init_guess is None:
@@ -168,25 +210,61 @@ def fit_bicelle(
         bounds.sld_solvent,
     ]
 
-    def fun_de(x):
+    def fun_global(x):
         return _objective_stage1(x, q, y, bounds)
 
-    print("Starting global optimization (differential evolution)...", flush=True)
-    result_de = differential_evolution(
-        fun_de,
-        bounds=gl_bounds,
-        init='latinhypercube',
-        strategy='best1bin',
-        maxiter=300,
-        popsize=15,
-        tol=1e-6,
-        polish=False,
-        seed=42,
-        updating='deferred',
-        workers=1,
-    )
+    # Run global optimization based on selected method
+    if optimizer == 'cma':
+        print("Starting global optimization (CMA-ES)...", flush=True)
 
-    radius_opt, tr_opt, tf_opt, length_opt, sld_c_opt, sld_f_opt, sld_r_opt, sld_s_opt = result_de.x
+        # Prepare bounds for CMA-ES
+        lower_bounds = np.array([b[0] for b in gl_bounds])
+        upper_bounds = np.array([b[1] for b in gl_bounds])
+
+        x0 = np.array(init_guess, dtype=float)
+        x0 = np.clip(x0, lower_bounds, upper_bounds)
+
+        # CMA-ES options
+        opts = {
+            'bounds': [lower_bounds.tolist(), upper_bounds.tolist()],
+            'maxfevals': maxfevals,
+            'seed': 42,
+            'verbose': -1 if not cma_verbose else -9,
+            'tolfun': 1e-8,
+            'tolx': 1e-8,
+        }
+
+        es = cma.CMAEvolutionStrategy(x0, sigma0, opts)
+        es.optimize(fun_global)
+
+        result_global = es.result
+        x_best = result_global.xbest
+        fun_best = result_global.fbest
+        nfev_global = result_global.evaluations
+
+        print(f"CMA-ES completed: {nfev_global} function evaluations", flush=True)
+        print(f"Best cost: {fun_best:.6g}", flush=True)
+
+    else:  # optimizer == 'de'
+        print("Starting global optimization (differential evolution)...", flush=True)
+        result_global = differential_evolution(
+            fun_global,
+            bounds=gl_bounds,
+            init='latinhypercube',
+            strategy='best1bin',
+            maxiter=300,
+            popsize=15,
+            tol=1e-6,
+            polish=False,
+            seed=42,
+            updating='deferred',
+            workers=1,
+        )
+        x_best = result_global.x
+        fun_best = result_global.fun
+        nfev_global = result_global.nfev
+
+    radius_opt, tr_opt, tf_opt, length_opt, sld_c_opt, sld_f_opt, sld_r_opt, sld_s_opt = x_best
 
     # Compute scale and background
     M0 = bicelle_intensity(
@@ -197,8 +275,8 @@ def fit_bicelle(
     s0, b0 = _ls_scale_background(M0, y, _weights_from_y(y))
 
     # Stage 2: local refinement
-    x0 = np.array([radius_opt, tr_opt, tf_opt, length_opt,
-                   sld_c_opt, sld_f_opt, sld_r_opt, sld_s_opt, s0, b0], dtype=float)
+    x0_stage2 = np.array([radius_opt, tr_opt, tf_opt, length_opt,
+                          sld_c_opt, sld_f_opt, sld_r_opt, sld_s_opt, s0, b0], dtype=float)
 
     lower = np.array([
         bounds.radius[0], bounds.thick_rim[0], bounds.thick_face[0],
@@ -215,7 +293,7 @@ def fit_bicelle(
     print("Starting local refinement (least squares)...", flush=True)
     res_ls = least_squares(
         _residuals_stage2,
-        x0,
+        x0_stage2,
         bounds=(lower, upper),
         args=(q, y, use_logspace),
         method='trf',
@@ -236,6 +314,7 @@ def fit_bicelle(
     return {
         'success': bool(res_ls.success),
         'message': res_ls.message,
+        'optimizer': optimizer,
         'params': {
             'radius': float(radius),
             'thick_rim': float(tr),
@@ -251,7 +330,8 @@ def fit_bicelle(
         'yfit': yfit,
         'cost': float(res_ls.cost),
         'nfev': int(res_ls.nfev),
-        'global_cost': float(result_de.fun),
+        'nfev_global': int(nfev_global),
+        'global_cost': float(fun_best),
     }
 
 
@@ -326,6 +406,16 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument('--exclude', action='append', default=[],
                     help='Exclude q range(s) as lo:hi; repeatable')
 
+    # Optimizer selection
+    ap.add_argument('--optimizer', type=str, default='cma', choices=['cma', 'de'],
+                    help='Global optimizer: cma (CMA-ES, default) or de (Differential Evolution)')
+    ap.add_argument('--sigma0', type=float, default=0.3,
+                    help='Initial step size for CMA-ES (default: 0.3)')
+    ap.add_argument('--maxfevals', type=int, default=2000,
+                    help='Maximum function evaluations for CMA-ES (default: 2000)')
+    ap.add_argument('--cma-verbose', action='store_true',
+                    help='Show detailed CMA-ES progress')
+
     # Bounds tuning
     ap.add_argument('--radius-min', type=float,
                     help='Lower bound for radius [Å]')
@@ -360,7 +450,15 @@ def main(argv: list[str] | None = None) -> int:
         b.length = (b.length[0], float(args.length_max))
 
     # Fit
-    res = fit_bicelle(q_fit, y_fit, use_logspace=args.log, bounds=b)
+    res = fit_bicelle(
+        q_fit, y_fit,
+        use_logspace=args.log,
+        bounds=b,
+        optimizer=args.optimizer,
+        sigma0=args.sigma0,
+        maxfevals=args.maxfevals,
+        cma_verbose=args.cma_verbose,
+    )
 
     p = res['params']
 
@@ -370,6 +468,7 @@ def main(argv: list[str] | None = None) -> int:
     print('\n' + '='*60)
     print('Fit success:', res['success'])
     print('Message:', res['message'])
+    print('Optimizer:', res['optimizer'].upper())
     print('='*60)
     print('Parameters:')
     print('  radius              : {:.3f} Å'.format(p['radius']))
@@ -386,17 +485,21 @@ def main(argv: list[str] | None = None) -> int:
     print('  background          : {:.6g}'.format(p['background']))
     print('Cost (local)  :', res['cost'])
     print('Cost (global) :', res['global_cost'])
+    print('Function evaluations (Stage 1):', res['nfev_global'])
+    print('Function evaluations (Stage 2):', res['nfev'])
     print('='*60)
 
     # Determine output filename
     output_file = args.output if args.output else 'bicelle_fit_result.dat'
 
     # Prepare header with all fit parameters (xmgrace format with # comments)
+    optimizer_name = 'CMA-ES' if res['optimizer'] == 'cma' else 'Differential Evolution'
     header_lines = [
         'Core-shell bicelle fit results',
         '',
         'Fit success: {}'.format(res['success']),
         'Message: {}'.format(res['message']),
+        'Optimizer: {}'.format(optimizer_name),
         '',
         'Fitted Parameters:',
         '  radius              = {:.3f} Å'.format(p['radius']),
@@ -415,7 +518,8 @@ def main(argv: list[str] | None = None) -> int:
         'Fit quality:',
         '  Cost (local)        = {:.6g}'.format(res['cost']),
         '  Cost (global)       = {:.6g}'.format(res['global_cost']),
-        '  Number of function evaluations = {}'.format(res['nfev']),
+        '  Number of function evaluations (Stage 1) = {}'.format(res['nfev_global']),
+        '  Number of function evaluations (Stage 2) = {}'.format(res['nfev']),
         '',
         'Data columns:',
         '  q (1/Å)    I_fit',
