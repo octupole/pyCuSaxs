@@ -388,11 +388,44 @@ def main(argv: list[str] | None = None) -> int:
     print('Cost (global) :', res['global_cost'])
     print('='*60)
 
-    if args.output:
-        out = np.column_stack([q_fit, res['yfit']])
-        np.savetxt(args.output, out, fmt=['%.6f', '%.8g'],
-                   header='q\tI_fit', comments='')
-        print('Wrote fit to', args.output)
+    # Determine output filename
+    output_file = args.output if args.output else 'bicelle_fit_result.dat'
+
+    # Prepare header with all fit parameters (xmgrace format with # comments)
+    header_lines = [
+        'Core-shell bicelle fit results',
+        '',
+        'Fit success: {}'.format(res['success']),
+        'Message: {}'.format(res['message']),
+        '',
+        'Fitted Parameters:',
+        '  radius              = {:.3f} Å'.format(p['radius']),
+        '  thick_rim           = {:.3f} Å'.format(p['thick_rim']),
+        '  thick_face          = {:.3f} Å'.format(p['thick_face']),
+        '  length              = {:.3f} Å'.format(p['length']),
+        '  total_thickness     = {:.3f} Å  (2*thick_face + length)'.format(total_thickness),
+        '  sld_core            = {:.3f} (1e-6/Å²)'.format(p['sld_core']),
+        '  sld_face            = {:.3f} (1e-6/Å²)'.format(p['sld_face']),
+        '  sld_rim             = {:.3f} (1e-6/Å²)'.format(p['sld_rim']),
+        '  sld_solvent         = {:.3f} (1e-6/Å²)'.format(p['sld_solvent']),
+        '  scale               = {:.6g}'.format(p['scale']),
+        '  background          = {:.6g}'.format(p['background']),
+        '',
+        'Fit quality:',
+        '  Cost (local)        = {:.6g}'.format(res['cost']),
+        '  Cost (global)       = {:.6g}'.format(res['global_cost']),
+        '  Number of function evaluations = {}'.format(res['nfev']),
+        '',
+        'Data columns:',
+        '  q (1/Å)    I_fit',
+    ]
+    header = '\n'.join(header_lines)
+
+    # Write fitted curve with parameters in header
+    out = np.column_stack([q_fit, res['yfit']])
+    np.savetxt(output_file, out, fmt=['%.6f', '%.8g'],
+               header=header, comments='# ')
+    print('Wrote fit to', output_file)
 
     if args.plot:
         import matplotlib.pyplot as plt
