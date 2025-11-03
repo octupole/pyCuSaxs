@@ -31,6 +31,7 @@ saxs-db = "pycusaxs.saxs_db_tool:main"
 saxs-subtract = "pycusaxs.saxs_subtract:main"
 lamellar-fit = "pycusaxs.fit.lamellar_fit:main"
 lamellar-fit-improved = "pycusaxs.fit.lamellar_fit_improved:main"
+bicelle-fit = "pycusaxs.fit.bicelle_fit:main"
 
 [project.optional-dependencies]
 cuda11 = ["cupy-cuda11x>=11.0"]
