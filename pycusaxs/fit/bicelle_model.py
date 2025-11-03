@@ -1,10 +1,10 @@
-"""Core-shell bicelle elliptical model implementation.
+"""Core-shell bicelle model implementation.
 
-This module implements the SasView core_shell_bicelle_elliptical model
-for fitting SAXS data from elliptical bicelle structures.
+This module implements the SasView core_shell_bicelle model
+for fitting SAXS data from circular bicelle structures.
 
 Reference:
-    https://www.sasview.org/docs/user/models/core_shell_bicelle_elliptical.html
+    https://www.sasview.org/docs/user/models/core_shell_bicelle.html
 """
 
 import numpy as np
@@ -36,7 +36,6 @@ def _sinc(x: np.ndarray) -> np.ndarray:
 def bicelle_form_factor_1d(
     q: np.ndarray,
     radius: float,
-    x_core: float,
     thick_rim: float,
     thick_face: float,
     length: float,
@@ -46,18 +45,16 @@ def bicelle_form_factor_1d(
     sld_solvent: float,
 ) -> np.ndarray:
     """
-    Compute the orientationally-averaged form factor for core-shell elliptical bicelle.
+    Compute the orientationally-averaged form factor for core-shell bicelle.
 
-    This performs numerical integration over orientation angles (alpha, psi).
+    This performs numerical integration over orientation angle alpha.
 
     Parameters
     ----------
     q : np.ndarray
         Scattering vector magnitude (1/Å)
     radius : float
-        Minor radius of elliptical core R_minor (Å)
-    x_core : float
-        Axial ratio X = R_major / R_minor
+        Core cylinder radius (Å)
     thick_rim : float
         Rim shell thickness (Å)
     thick_face : float
@@ -80,7 +77,6 @@ def bicelle_form_factor_1d(
     """
     q = np.asarray(q, dtype=float)
     R = float(max(radius, 0.1))
-    X = float(max(x_core, 1.0))
     tr = float(max(thick_rim, 0.0))
     tf = float(max(thick_face, 0.0))
     L = float(max(length, 1.0))
@@ -90,56 +86,47 @@ def bicelle_form_factor_1d(
     drho_r = float(sld_rim - sld_solvent)
 
     # Volumes
-    V_core = np.pi * X * R * R * L
-    V_core_face = np.pi * X * R * R * (L + 2.0 * tf)
-    V_total = np.pi * (R + tr) * (X * R + tr) * (L + 2.0 * tf)
+    V_core = np.pi * R * R * L
+    V_core_face = np.pi * R * R * (L + 2.0 * tf)
+    V_total = np.pi * (R + tr) * (R + tr) * (L + 2.0 * tf)
 
     result = np.zeros_like(q)
 
-    # Integration over alpha (0 to pi/2) and psi (0 to pi)
-    # For speed, use moderate resolution
-    n_alpha = 20
-    n_psi = 20
+    # Integration over alpha (0 to pi/2)
+    n_alpha = 30
     alpha_vals = np.linspace(0, np.pi / 2, n_alpha)
-    psi_vals = np.linspace(0, np.pi, n_psi)
 
     for alpha in alpha_vals:
         sin_alpha = np.sin(alpha)
         cos_alpha = np.cos(alpha)
 
-        for psi in psi_vals:
-            # Effective radius in the ellipse cross-section
-            # R' = (R/sqrt(2)) * sqrt[(1+X²) + (1-X²)cos(2ψ)]
-            cos_2psi = np.cos(2.0 * psi)
-            R_prime = (R / np.sqrt(2.0)) * np.sqrt((1.0 + X * X) + (1.0 - X * X) * cos_2psi)
+        # Q projections
+        q_perp = q * sin_alpha  # perpendicular to cylinder axis
+        q_par = q * cos_alpha  # parallel to cylinder axis
 
-            # Q projections
-            q_perp = q * sin_alpha  # perpendicular to cylinder axis
-            q_par = q * cos_alpha  # parallel to cylinder axis
+        # Bessel and sinc terms for three regions
+        # Core contribution
+        bes_c = _besinc(q_perp * R)
+        sinc_c = _sinc(q_par * L / 2.0)
+        F_c = drho_c * V_core * bes_c * sinc_c
 
-            # Bessel and sinc terms for three regions
-            # Core contribution
-            bes_c = _besinc(q_perp * R_prime)
-            sinc_c = _sinc(q_par * L / 2.0)
-            F_c = drho_c * V_core * bes_c * sinc_c
+        # Core+face contribution
+        sinc_cf = _sinc(q_par * (L / 2.0 + tf))
+        F_cf = drho_f * V_core_face * bes_c * sinc_cf
 
-            # Core+face contribution
-            sinc_cf = _sinc(q_par * (L / 2.0 + tf))
-            F_cf = drho_f * V_core_face * bes_c * sinc_cf
+        # Total (rim) contribution
+        bes_t = _besinc(q_perp * (R + tr))
+        sinc_t = _sinc(q_par * (L / 2.0 + tf))
+        F_t = drho_r * V_total * bes_t * sinc_t
 
-            # Total (rim) contribution
-            bes_t = _besinc(q_perp * (R_prime + tr))
-            sinc_t = _sinc(q_par * (L / 2.0 + tf))
-            F_t = drho_r * V_total * bes_t * sinc_t
+        # Sum contributions
+        F_total = F_c + F_cf + F_t
 
-            # Sum contributions
-            F_total = F_c + F_cf + F_t
-
-            # Accumulate |F|² weighted by sin(alpha) for spherical integration
-            result += (F_total * F_total) * sin_alpha
+        # Accumulate |F|² weighted by sin(alpha) for spherical integration
+        result += (F_total * F_total) * sin_alpha
 
     # Normalize by integration weights
-    norm = n_alpha * n_psi
+    norm = n_alpha
     result /= norm
 
     return result
@@ -148,7 +135,6 @@ def bicelle_form_factor_1d(
 def bicelle_intensity(
     q: np.ndarray,
     radius: float,
-    x_core: float,
     thick_rim: float,
     thick_face: float,
     length: float,
@@ -160,7 +146,7 @@ def bicelle_intensity(
     background: float = 0.0,
 ) -> np.ndarray:
     """
-    Compute I(q) for core-shell elliptical bicelle model.
+    Compute I(q) for core-shell bicelle model.
 
     I(q) = (scale / V_total) * <F²(q)> + background
 
@@ -169,9 +155,7 @@ def bicelle_intensity(
     q : np.ndarray
         Scattering vector magnitude (1/Å)
     radius : float
-        Minor radius of elliptical core R_minor (Å)
-    x_core : float
-        Axial ratio X = R_major / R_minor
+        Core cylinder radius (Å)
     thick_rim : float
         Rim shell thickness (Å)
     thick_face : float
@@ -198,17 +182,16 @@ def bicelle_intensity(
     """
     q = np.asarray(q, dtype=float)
     R = float(max(radius, 0.1))
-    X = float(max(x_core, 1.0))
     tr = float(max(thick_rim, 0.0))
     tf = float(max(thick_face, 0.0))
     L = float(max(length, 1.0))
 
     # Total volume
-    V_total = np.pi * (R + tr) * (X * R + tr) * (L + 2.0 * tf)
+    V_total = np.pi * (R + tr) * (R + tr) * (L + 2.0 * tf)
 
     # Form factor
     F2_avg = bicelle_form_factor_1d(
-        q, radius, x_core, thick_rim, thick_face, length,
+        q, radius, thick_rim, thick_face, length,
         sld_core, sld_face, sld_rim, sld_solvent
     )
 

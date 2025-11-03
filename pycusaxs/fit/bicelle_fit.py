@@ -30,9 +30,8 @@ from .bicelle_model import (
 
 @dataclass
 class BicelleBounds:
-    """Parameter bounds for core-shell elliptical bicelle fitting."""
+    """Parameter bounds for core-shell bicelle fitting."""
     radius: Tuple[float, float] = (10.0, 200.0)           # Å
-    x_core: Tuple[float, float] = (1.0, 10.0)             # axial ratio
     thick_rim: Tuple[float, float] = (1.0, 50.0)          # Å
     thick_face: Tuple[float, float] = (1.0, 50.0)         # Å
     length: Tuple[float, float] = (10.0, 300.0)           # Å
@@ -81,11 +80,11 @@ def _weights_from_y(y: np.ndarray) -> np.ndarray:
 
 def _objective_stage1(x: np.ndarray, q: np.ndarray, y: np.ndarray, bnds: BicelleBounds) -> float:
     """Global search objective with analytic (s, b)."""
-    radius, x_core, thick_rim, thick_face, length, sld_c, sld_f, sld_r, sld_s = x
+    radius, thick_rim, thick_face, length, sld_c, sld_f, sld_r, sld_s = x
 
     # Model shape with unit scale/background
     M = bicelle_intensity(
-        q, radius, x_core, thick_rim, thick_face, length,
+        q, radius, thick_rim, thick_face, length,
         sld_c, sld_f, sld_r, sld_s,
         scale=1.0, background=0.0
     )
@@ -98,10 +97,10 @@ def _objective_stage1(x: np.ndarray, q: np.ndarray, y: np.ndarray, bnds: Bicelle
 
 def _residuals_stage2(theta: np.ndarray, q: np.ndarray, y: np.ndarray, logspace: bool) -> np.ndarray:
     """Residuals for local refinement."""
-    radius, x_core, thick_rim, thick_face, length, sld_c, sld_f, sld_r, sld_s, s, b = theta
+    radius, thick_rim, thick_face, length, sld_c, sld_f, sld_r, sld_s, s, b = theta
 
     yhat = bicelle_intensity(
-        q, radius, x_core, thick_rim, thick_face, length,
+        q, radius, thick_rim, thick_face, length,
         sld_c, sld_f, sld_r, sld_s,
         scale=s, background=b
     )
@@ -142,26 +141,24 @@ def fit_bicelle(
         try:
             radius_est, length_est = estimate_bicelle_size(q, y)
         except Exception:
-            radius_est = 30.0
+            radius_est = 80.0
             length_est = 50.0
 
         radius0 = np.clip(radius_est, *bounds.radius)
         length0 = np.clip(length_est, *bounds.length)
-        x_core0 = 3.0  # typical ellipticity
-        thick_rim0 = 8.0
-        thick_face0 = 14.0
-        sld_core0 = 4.0
-        sld_face0 = 7.0
-        sld_rim0 = 1.0
-        sld_solvent0 = 6.0
+        thick_rim0 = 10.0
+        thick_face0 = 10.0
+        sld_core0 = 1.0
+        sld_face0 = 4.0
+        sld_rim0 = 4.0
+        sld_solvent0 = 1.0
 
-        init_guess = (radius0, x_core0, thick_rim0, thick_face0, length0,
+        init_guess = (radius0, thick_rim0, thick_face0, length0,
                      sld_core0, sld_face0, sld_rim0, sld_solvent0)
 
     # Stage 1: global search
     gl_bounds = [
         bounds.radius,
-        bounds.x_core,
         bounds.thick_rim,
         bounds.thick_face,
         bounds.length,
@@ -189,27 +186,27 @@ def fit_bicelle(
         workers=1,
     )
 
-    radius_opt, x_core_opt, tr_opt, tf_opt, length_opt, sld_c_opt, sld_f_opt, sld_r_opt, sld_s_opt = result_de.x
+    radius_opt, tr_opt, tf_opt, length_opt, sld_c_opt, sld_f_opt, sld_r_opt, sld_s_opt = result_de.x
 
     # Compute scale and background
     M0 = bicelle_intensity(
-        q, radius_opt, x_core_opt, tr_opt, tf_opt, length_opt,
+        q, radius_opt, tr_opt, tf_opt, length_opt,
         sld_c_opt, sld_f_opt, sld_r_opt, sld_s_opt,
         scale=1.0, background=0.0
     )
     s0, b0 = _ls_scale_background(M0, y, _weights_from_y(y))
 
     # Stage 2: local refinement
-    x0 = np.array([radius_opt, x_core_opt, tr_opt, tf_opt, length_opt,
+    x0 = np.array([radius_opt, tr_opt, tf_opt, length_opt,
                    sld_c_opt, sld_f_opt, sld_r_opt, sld_s_opt, s0, b0], dtype=float)
 
     lower = np.array([
-        bounds.radius[0], bounds.x_core[0], bounds.thick_rim[0], bounds.thick_face[0],
+        bounds.radius[0], bounds.thick_rim[0], bounds.thick_face[0],
         bounds.length[0], bounds.sld_core[0], bounds.sld_face[0], bounds.sld_rim[0],
         bounds.sld_solvent[0], bounds.scale[0], bounds.background[0]
     ])
     upper = np.array([
-        bounds.radius[1], bounds.x_core[1], bounds.thick_rim[1], bounds.thick_face[1],
+        bounds.radius[1], bounds.thick_rim[1], bounds.thick_face[1],
         bounds.length[1], bounds.sld_core[1], bounds.sld_face[1], bounds.sld_rim[1],
         bounds.sld_solvent[1], bounds.scale[1],
         bounds.background[1] if np.isfinite(bounds.background[1]) else 1e12
@@ -229,10 +226,10 @@ def fit_bicelle(
         verbose=0,
     )
 
-    radius, x_core, tr, tf, length, sld_c, sld_f, sld_r, sld_s, s, b = res_ls.x
+    radius, tr, tf, length, sld_c, sld_f, sld_r, sld_s, s, b = res_ls.x
 
     yfit = bicelle_intensity(
-        q, radius, x_core, tr, tf, length,
+        q, radius, tr, tf, length,
         sld_c, sld_f, sld_r, sld_s, s, b
     )
 
@@ -241,7 +238,6 @@ def fit_bicelle(
         'message': res_ls.message,
         'params': {
             'radius': float(radius),
-            'x_core': float(x_core),
             'thick_rim': float(tr),
             'thick_face': float(tf),
             'length': float(length),
@@ -314,7 +310,7 @@ def _apply_q_window(q: np.ndarray,
 def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point."""
     ap = argparse.ArgumentParser(
-        description='Fit core_shell_bicelle_elliptical model to I(q) data')
+        description='Fit core_shell_bicelle model to I(q) data')
     ap.add_argument('-f', '--file', required=True, help='Two-column file: q I(q)')
     ap.add_argument('-p', '--plot', action='store_true', help='Show data and fit')
     ap.add_argument('-o', '--output', help='Write fitted I(q) to this file')
@@ -329,8 +325,6 @@ def main(argv: list[str] | None = None) -> int:
     # Bounds tuning
     ap.add_argument('--radius-min', type=float, help='Lower bound for radius [Å]')
     ap.add_argument('--radius-max', type=float, help='Upper bound for radius [Å]')
-    ap.add_argument('--x-core-min', type=float, help='Lower bound for x_core')
-    ap.add_argument('--x-core-max', type=float, help='Upper bound for x_core')
     ap.add_argument('--length-min', type=float, help='Lower bound for length [Å]')
     ap.add_argument('--length-max', type=float, help='Upper bound for length [Å]')
 
@@ -351,10 +345,6 @@ def main(argv: list[str] | None = None) -> int:
         b.radius = (float(args.radius_min), b.radius[1])
     if args.radius_max is not None:
         b.radius = (b.radius[0], float(args.radius_max))
-    if args.x_core_min is not None:
-        b.x_core = (float(args.x_core_min), b.x_core[1])
-    if args.x_core_max is not None:
-        b.x_core = (b.x_core[0], float(args.x_core_max))
     if args.length_min is not None:
         b.length = (float(args.length_min), b.length[1])
     if args.length_max is not None:
@@ -364,16 +354,20 @@ def main(argv: list[str] | None = None) -> int:
     res = fit_bicelle(q_fit, y_fit, use_logspace=args.log, bounds=b)
 
     p = res['params']
+
+    # Calculate total bicelle thickness
+    total_thickness = 2.0 * p['thick_face'] + p['length']
+
     print('\n' + '='*60)
     print('Fit success:', res['success'])
     print('Message:', res['message'])
     print('='*60)
     print('Parameters:')
-    print('  radius (R_minor)    : {:.3f} Å'.format(p['radius']))
-    print('  x_core (R_maj/R_min): {:.3f}'.format(p['x_core']))
+    print('  radius              : {:.3f} Å'.format(p['radius']))
     print('  thick_rim           : {:.3f} Å'.format(p['thick_rim']))
     print('  thick_face          : {:.3f} Å'.format(p['thick_face']))
     print('  length              : {:.3f} Å'.format(p['length']))
+    print('  total_thickness     : {:.3f} Å  (2*thick_face + length)'.format(total_thickness))
     print('  sld_core            : {:.3f} (1e-6/Å²)'.format(p['sld_core']))
     print('  sld_face            : {:.3f} (1e-6/Å²)'.format(p['sld_face']))
     print('  sld_rim             : {:.3f} (1e-6/Å²)'.format(p['sld_rim']))
@@ -399,7 +393,7 @@ def main(argv: list[str] | None = None) -> int:
         plt.xlabel('q (1/Å)')
         plt.ylabel('I(q)')
         plt.legend()
-        plt.title('Core-shell elliptical bicelle fit')
+        plt.title('Core-shell bicelle fit')
         plt.tight_layout()
         plt.show()
 
