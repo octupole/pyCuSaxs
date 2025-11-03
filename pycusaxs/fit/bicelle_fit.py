@@ -403,7 +403,8 @@ def main(argv: list[str] | None = None) -> int:
         '  thick_rim           = {:.3f} Å'.format(p['thick_rim']),
         '  thick_face          = {:.3f} Å'.format(p['thick_face']),
         '  length              = {:.3f} Å'.format(p['length']),
-        '  total_thickness     = {:.3f} Å  (2*thick_face + length)'.format(total_thickness),
+        '  total_thickness     = {:.3f} Å  (2*thick_face + length)'.format(
+            total_thickness),
         '  sld_core            = {:.3f} (1e-6/Å²)'.format(p['sld_core']),
         '  sld_face            = {:.3f} (1e-6/Å²)'.format(p['sld_face']),
         '  sld_rim             = {:.3f} (1e-6/Å²)'.format(p['sld_rim']),
