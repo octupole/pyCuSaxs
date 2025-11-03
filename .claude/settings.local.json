@@ -35,7 +35,8 @@
       "Bash(/opt/miniforge/envs/pycusaxs/bin/pip install:*)",
       "Bash(bicelle-fit:*)",
       "Read(//opt/miniforge/envs/pycusaxs/bin/**)",
-      "Bash(/opt/miniforge/envs/pycusaxs/bin/bicelle-fit:*)"
+      "Bash(/opt/miniforge/envs/pycusaxs/bin/bicelle-fit:*)",
+      "Bash(tee:*)"
     ],
     "deny": [],
     "ask": []
