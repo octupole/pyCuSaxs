@@ -32,9 +32,9 @@ from .bicelle_model import (
 class BicelleBounds:
     """Parameter bounds for core-shell bicelle fitting."""
     radius: Tuple[float, float] = (10.0, 200.0)           # Å
-    thick_rim: Tuple[float, float] = (1.0, 50.0)          # Å
+    thick_rim: Tuple[float, float] = (1.0, 40.0)          # Å
     thick_face: Tuple[float, float] = (1.0, 50.0)         # Å
-    length: Tuple[float, float] = (10.0, 300.0)           # Å
+    length: Tuple[float, float] = (10.0, 50.0)           # Å
     sld_core: Tuple[float, float] = (-10.0, 10.0)         # 1e-6/Å²
     sld_face: Tuple[float, float] = (-10.0, 10.0)         # 1e-6/Å²
     sld_rim: Tuple[float, float] = (-10.0, 10.0)          # 1e-6/Å²
@@ -141,8 +141,8 @@ def fit_bicelle(
         try:
             radius_est, length_est = estimate_bicelle_size(q, y)
         except Exception:
-            radius_est = 80.0
-            length_est = 50.0
+            radius_est = 50.0
+            length_est = 15.0
 
         radius0 = np.clip(radius_est, *bounds.radius)
         length0 = np.clip(length_est, *bounds.length)
@@ -154,7 +154,7 @@ def fit_bicelle(
         sld_solvent0 = 1.0
 
         init_guess = (radius0, thick_rim0, thick_face0, length0,
-                     sld_core0, sld_face0, sld_rim0, sld_solvent0)
+                      sld_core0, sld_face0, sld_rim0, sld_solvent0)
 
     # Stage 1: global search
     gl_bounds = [
@@ -274,12 +274,14 @@ def _parse_exclude(arg_list: Sequence[str]) -> List[Tuple[float, float]]:
         if ':' in s:
             a, b = s.split(':', 1)
             try:
-                lo = float(a); hi = float(b)
+                lo = float(a)
+                hi = float(b)
             except ValueError:
                 continue
         else:
             try:
-                lo = float(s); hi = np.inf
+                lo = float(s)
+                hi = np.inf
             except ValueError:
                 continue
         if hi < lo:
@@ -311,8 +313,10 @@ def main(argv: list[str] | None = None) -> int:
     """Main CLI entry point."""
     ap = argparse.ArgumentParser(
         description='Fit core_shell_bicelle model to I(q) data')
-    ap.add_argument('-f', '--file', required=True, help='Two-column file: q I(q)')
-    ap.add_argument('-p', '--plot', action='store_true', help='Show data and fit')
+    ap.add_argument('-f', '--file', required=True,
+                    help='Two-column file: q I(q)')
+    ap.add_argument('-p', '--plot', action='store_true',
+                    help='Show data and fit')
     ap.add_argument('-o', '--output', help='Write fitted I(q) to this file')
     ap.add_argument('--log', action='store_true',
                     help='Use log-residual objective for local refinement')
@@ -323,10 +327,14 @@ def main(argv: list[str] | None = None) -> int:
                     help='Exclude q range(s) as lo:hi; repeatable')
 
     # Bounds tuning
-    ap.add_argument('--radius-min', type=float, help='Lower bound for radius [Å]')
-    ap.add_argument('--radius-max', type=float, help='Upper bound for radius [Å]')
-    ap.add_argument('--length-min', type=float, help='Lower bound for length [Å]')
-    ap.add_argument('--length-max', type=float, help='Upper bound for length [Å]')
+    ap.add_argument('--radius-min', type=float,
+                    help='Lower bound for radius [Å]')
+    ap.add_argument('--radius-max', type=float,
+                    help='Upper bound for radius [Å]')
+    ap.add_argument('--length-min', type=float,
+                    help='Lower bound for length [Å]')
+    ap.add_argument('--length-max', type=float,
+                    help='Upper bound for length [Å]')
 
     args = ap.parse_args(argv)
 
@@ -335,7 +343,8 @@ def main(argv: list[str] | None = None) -> int:
 
     # Apply q-window/mask
     exclude_ranges = _parse_exclude(args.exclude)
-    q_fit, y_fit, mask = _apply_q_window(q, y, args.qmin, args.qmax, exclude_ranges)
+    q_fit, y_fit, mask = _apply_q_window(
+        q, y, args.qmin, args.qmax, exclude_ranges)
     if q_fit.size < 10:
         print('Warning: very few points in the selected q-window', flush=True)
 
@@ -367,7 +376,8 @@ def main(argv: list[str] | None = None) -> int:
     print('  thick_rim           : {:.3f} Å'.format(p['thick_rim']))
     print('  thick_face          : {:.3f} Å'.format(p['thick_face']))
     print('  length              : {:.3f} Å'.format(p['length']))
-    print('  total_thickness     : {:.3f} Å  (2*thick_face + length)'.format(total_thickness))
+    print(
+        '  total_thickness     : {:.3f} Å  (2*thick_face + length)'.format(total_thickness))
     print('  sld_core            : {:.3f} (1e-6/Å²)'.format(p['sld_core']))
     print('  sld_face            : {:.3f} (1e-6/Å²)'.format(p['sld_face']))
     print('  sld_rim             : {:.3f} (1e-6/Å²)'.format(p['sld_rim']))
