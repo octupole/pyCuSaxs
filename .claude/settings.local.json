@@ -28,7 +28,14 @@
       "Bash(/opt/miniforge3/envs/pycusaxs/bin/pycusaxs --help)",
       "Bash(/opt/miniforge3/envs/pycusaxs/bin/python /home/marchi/tmp/pyCuSaxs/bin/pycusaxs --help)",
       "Bash(tree:*)",
-      "Read(//home/marchi/**)"
+      "Read(//home/marchi/**)",
+      "Bash(/opt/miniforge3/envs/pycusaxs/bin/python:*)",
+      "Bash(conda env list:*)",
+      "Bash(/opt/miniforge/envs/pycusaxs/bin/python:*)",
+      "Bash(/opt/miniforge/envs/pycusaxs/bin/pip install:*)",
+      "Bash(bicelle-fit:*)",
+      "Read(//opt/miniforge/envs/pycusaxs/bin/**)",
+      "Bash(/opt/miniforge/envs/pycusaxs/bin/bicelle-fit:*)"
     ],
     "deny": [],
     "ask": []

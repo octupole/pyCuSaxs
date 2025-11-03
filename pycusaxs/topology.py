@@ -619,7 +619,9 @@ class Topology:
         return self.ts.positions
 
     def iter_frames_stream(self, start: int, stop: int, step: int = 1,
-                          show_progress: bool = False) -> Iterator[Dict]:
+                           show_progress: bool = False,
+                           cluster_selection: Optional[str] = None,
+                           cluster_cutoff: float = 15.0) -> Iterator[Dict]:
         """
         Memory-efficient streaming iterator for large trajectories.
 
@@ -632,6 +634,10 @@ class Topology:
             stop: Stopping frame index (exclusive)
             step: Frame stride (default: 1, every frame)
             show_progress: If True, display progress bar (default: False)
+            cluster_selection: Selection string for atoms to cluster and reconstruct
+                              (default: None, no clustering)
+                              Examples: 'resname SDS', 'resname LYS or resname ARG'
+            cluster_cutoff: Distance cutoff for DBSCAN clustering in Angstroms (default: 15.0)
 
         Yields:
             dict: Frame data with keys:
@@ -660,7 +666,69 @@ class Topology:
             except ImportError:
                 pass  # Progress module not available, continue without progress bar
 
+        # Prepare cluster reconstruction if requested
+        cluster_atoms = None
+        if cluster_selection is not None:
+            try:
+                import mdaencore as encore
+                cluster_atoms = self.universe.select_atoms(cluster_selection)
+                print(
+                    f"Cluster reconstruction enabled for {len(cluster_atoms)} atoms using DBSCAN (cutoff={cluster_cutoff} Å)")
+            except ImportError:
+                print(
+                    "Warning: mdaencore not available, skipping cluster reconstruction")
+                cluster_atoms = None
+
         for ts in trajectory:
+            # Perform cluster reconstruction if requested
+            if cluster_atoms is not None:
+                try:
+                    # Perform DBSCAN clustering on current frame
+                    from sklearn.cluster import DBSCAN
+                    from MDAnalysis.lib.mdamath import make_whole
+
+                    # Get positions of selected atoms (residue COM for clustering)
+                    residues = cluster_atoms.residues
+                    com_positions = np.array(
+                        [res.atoms.center_of_mass() for res in residues])
+
+                    # Run DBSCAN clustering
+                    clustering = DBSCAN(eps=cluster_cutoff,
+                                        min_samples=1, metric='euclidean')
+                    labels = clustering.fit_predict(com_positions)
+
+                    # Print number of clusters found
+                    n_clusters = len(set(labels)) - (1 if -1 in labels else 0)
+                    n_noise = list(labels).count(-1)
+                    print(
+                        f"Frame {ts.frame}: Found {n_clusters} clusters, {n_noise} noise points")
+
+                    # Reconstruct each cluster by making molecules whole
+                    for cluster_id in set(labels):
+                        if cluster_id == -1:  # Skip noise points
+                            continue
+
+                        # Get residues in this cluster
+                        cluster_residues_idx = np.where(
+                            labels == cluster_id)[0]
+                        cluster_residues = residues[cluster_residues_idx]
+
+                        # Make each molecule in the cluster whole
+                        for res in cluster_residues:
+                            try:
+                                make_whole(res.atoms, inplace=True)
+                            except:
+                                # If make_whole fails (e.g., no bonds), try unwrap
+                                try:
+                                    res.atoms.unwrap(
+                                        compound='residues', inplace=True)
+                                except:
+                                    pass  # Skip if both fail
+
+                except Exception as e:
+                    print(
+                        f"Warning: Cluster reconstruction failed for frame {ts.frame}: {e}")
+
             yield {
                 'frame': ts.frame,
                 'time': ts.time,

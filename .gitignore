@@ -52,6 +52,14 @@ export/
 *.whl
 *.xtc
 .env
+cluster_output/
+cluster_test_output/
+sds_comparison/
+test-clustering/
+full_compar/
+full_compare/
+full_system_test/
+
 !CMakeLists.txt
 !requirements.txt
 !requirements.testing.txt
