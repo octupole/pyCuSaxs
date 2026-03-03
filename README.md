@@ -10,6 +10,7 @@
 
 - **GPU-Accelerated Computing**: Leverages NVIDIA CUDA for high-performance SAXS calculations
 - **MDAnalysis Integration**: Native support for GROMACS and other MD trajectory formats
+- **Coarse-Grained Backmapping**: On-the-fly ML backmapping of Martini CG trajectories to all-atom resolution for SAXS
 - **Dual Interface**: Command-line tool and PySide6-based GUI
 - **Production Ready**: Comprehensive input validation, error handling, and exception translation
 - **Memory Efficient**: Streaming trajectory processing with double-buffered frame loading
@@ -205,6 +206,18 @@ python -m pycusaxs.main [OPTIONS]
 - `--cl COUNT`: Number of chloride ions
 - `--simulation TYPE`: Simulation ensemble (`nvt` or `npt`)
 
+#### Coarse-Grained Backmapping Parameters
+
+When `--cg` is set, the topology (`-s`) and trajectory (`-x`) refer to a Martini
+CG system. pyCuSAXS uses ML models (cVAE) to backmap CG bead positions to
+all-atom coordinates on the fly, then computes SAXS from the reconstructed AA frames.
+
+- `--cg, --coarse-grained`: Enable coarse-grained backmapping mode
+- `--cg-models DIR [DIR ...]`: Model directories containing trained cVAE weights and `config.json` (one per molecule family)
+- `--cg-mappings DIR`: Directory with `*_martini.yaml` atom-to-bead mapping files (default: `data/mappings`)
+- `--cg-templates DIR`: Directory with `<mol>_model.pdb` single-molecule template files (default: `.`)
+- `--cg-device {cuda,cpu}`: Device for backmapping inference (default: `cpu`)
+
 #### Examples
 
 **Basic SAXS calculation:**
@@ -240,6 +253,29 @@ pycusaxs \
     --na 150 --cl 150 \
     --simulation nvt \
     -o saxs_solvated.dat
+```
+
+**Coarse-grained trajectory with on-the-fly backmapping:**
+```bash
+# GOLH/GOLO glucolipid system
+pycusaxs \
+    -s cg_system.tpr \
+    -x cg_traj.xtc \
+    --cg \
+    --cg-models models_bonded \
+    -g 128 -b 0 -e 60 \
+    -o saxs_cg.dat
+
+# Mixed system (glucolipids + DOPC) with multiple model directories
+pycusaxs \
+    -s mixed_cg.tpr \
+    -x mixed_cg.xtc \
+    --cg \
+    --cg-models models_bonded models_dopc \
+    --cg-mappings data/mappings \
+    --cg-device cuda \
+    -g 128 -b 0 -e 100 --dt 5 \
+    -o saxs_mixed.dat
 ```
 
 ### Graphical User Interface
@@ -313,6 +349,69 @@ advanced = {
 results = cuda_connect(required, advanced)
 for line in results:
     print(line)
+```
+
+#### Coarse-Grained Backmapping API
+
+The `BackmappedTopology` class (from the
+[SAXS-backmapping](https://github.com/yourusername/SAXS-backmapping) project)
+is a drop-in replacement for `pycusaxs.topology.Topology`. It wraps a Martini
+CG trajectory and cVAE backmapping models, presenting backmapped all-atom
+coordinates to the CUDA backend with no intermediate file I/O.
+
+```python
+from backmap_engine import BackmappedTopology
+from pycusaxs.core import invoke_cuda_backend
+
+# Create backmapped topology (drop-in for pycusaxs.Topology)
+topo = BackmappedTopology(
+    cg_top="system_cg.tpr",
+    cg_traj="system_cg.xtc",
+    model_dirs=["models_bonded", "models_dopc"],
+    mappings_dir="data/mappings",
+    template_dir=".",
+    device="cpu",
+)
+
+print(f"AA atoms: {topo.n_atoms}, CG frames: {topo.n_frames}")
+print(f"Elements: {list(topo.get_atom_index().keys())}")
+
+# Configure and run SAXS
+required = {
+    "topology": "system_cg.tpr",
+    "trajectory": "system_cg.xtc",
+    "grid_size": [128, 128, 128],
+    "initial_frame": 0,
+    "last_frame": topo.n_frames - 1,
+}
+advanced = {
+    "coarse_grained": True,
+    "cg_models": ["models_bonded", "models_dopc"],
+    "order": 4, "bin_size": 0.01, "qcut": 0.5,
+    "out": "saxs_cg.dat",
+}
+
+results = invoke_cuda_backend(required, advanced, topo)
+```
+
+The `BackmapEngine` class is also available for standalone use (without pyCuSaxs):
+
+```python
+from backmap_engine import BackmapEngine
+import MDAnalysis as mda
+
+engine = BackmapEngine(
+    model_dirs=["models_bonded"],
+    mappings_dir="data/mappings",
+    template_dir=".",
+    device="cpu",
+)
+cg_u = mda.Universe("system_cg.tpr", "system_cg.xtc")
+engine.setup_system(cg_u)
+
+for ts in cg_u.trajectory:
+    positions = engine.backmap_frame()  # (n_atoms_aa, 3) float32
+    print(f"Frame {ts.frame}: {positions.shape}")
 ```
 
 ---
@@ -401,8 +500,9 @@ pyCuSAXS/
 
 ### Data Flow
 
+**Standard mode** (all-atom trajectory):
 ```
-Trajectory File (XTC/TRR)
+AA Trajectory (XTC/TRR)
          ↓
    MDAnalysis (Python)
          ↓
@@ -419,6 +519,24 @@ Trajectory File (XTC/TRR)
      4. FFT (cuFFT)
      5. Scattering factor application
      6. Histogram accumulation
+         ↓
+   Output: SAXS Profile (q vs I(q))
+```
+
+**Coarse-grained mode** (`--cg`):
+```
+CG Trajectory (Martini XTC)
+         ↓
+   MDAnalysis (Python)
+         ↓
+   BackmappedTopology → cVAE backmapping (per bead, batched)
+         ↓                ↓
+   AA positions (N×3)    Box from CG frame
+   in memory (no I/O)    (3×3 triclinic)
+         ↓
+   Frame Streaming → Same interface as Topology
+         ↓
+   CUDA Backend (C++)  ← identical pipeline
          ↓
    Output: SAXS Profile (q vs I(q))
 ```
@@ -807,6 +925,7 @@ If you use pyCuSAXS in your research, please cite:
 ## 🗺️ Roadmap
 
 **Planned Features:**
+- [x] Coarse-grained backmapping (Martini CG → AA via cVAE, on-the-fly SAXS)
 - [ ] Multi-GPU support
 - [ ] Real-time SAXS visualization
 - [ ] Support for DEER/FRET calculations

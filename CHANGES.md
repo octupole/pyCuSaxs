@@ -1,3 +1,58 @@
+# Change Log
+
+## Coarse-Grained Backmapping Support
+
+**Date:** 2026-03-03
+
+### Summary
+
+Added on-the-fly coarse-grained (CG) backmapping support. pyCuSAXS can now
+compute SAXS profiles directly from Martini CG trajectories by using
+ML-backmapped (cVAE) all-atom coordinates — no intermediate file I/O required.
+
+### New CLI Flags
+
+| Flag | Description |
+|------|-------------|
+| `--cg` | Enable coarse-grained backmapping mode |
+| `--cg-models DIR [DIR ...]` | Directories with trained cVAE model weights |
+| `--cg-mappings DIR` | Directory with `*_martini.yaml` mapping files |
+| `--cg-templates DIR` | Directory with `<mol>_model.pdb` template PDBs |
+| `--cg-device {cuda,cpu}` | Device for backmapping inference |
+
+### Files Modified
+
+- **`pycusaxs/cli.py`**: Added `--cg` argument group with 5 new parameters,
+  validation logic, and CG usage example in epilog.
+- **`pycusaxs/core.py`**: Added `_import_backmapped_topology()` for locating
+  `backmap_engine.py` at runtime; conditional topology creation (standard
+  `Topology` vs `BackmappedTopology`) based on `--cg` flag.
+
+### Integration
+
+The `BackmappedTopology` class (from the SAXS-backmapping project) is a
+drop-in replacement for `pycusaxs.topology.Topology`. It implements the same
+interface the C++ CUDA backend expects:
+
+- `get_atom_index()` → `{element: [atom_indices]}`
+- `read_frame(n)` → seek and backmap CG frame
+- `get_box()` → 3×3 triclinic box (Å)
+- `iter_frames_stream(start, stop, step)` → yield backmapped AA frames
+- `n_atoms`, `n_frames` properties
+
+### Usage
+
+```bash
+# Single molecule family
+pycusaxs -s cg.tpr -x cg.xtc --cg --cg-models models_bonded -g 128 -b 0 -e 60
+
+# Mixed system (multiple model directories)
+pycusaxs -s cg.tpr -x cg.xtc --cg --cg-models models_bonded models_dopc \
+    --cg-device cuda -g 128 -b 0 -e 100
+```
+
+---
+
 # Installation Improvements - Change Summary
 
 ## Issues Addressed
