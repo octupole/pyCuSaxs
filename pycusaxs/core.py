@@ -3,8 +3,14 @@ Core business logic for SAXS calculations.
 
 This module contains the main computation logic that coordinates between
 Python trajectory processing and the CUDA backend.
+
+Supports two topology modes:
+  - Standard: load an all-atom topology/trajectory via Topology class
+  - Coarse-grained: backmap a Martini CG trajectory on the fly via
+    BackmappedTopology (from the SAXS-backmapping project)
 """
 
+import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
@@ -13,6 +19,47 @@ from .topology import Topology
 from .saxs_defaults import SaxsDefaults
 
 logger = get_logger('core')
+
+
+def _import_backmapped_topology():
+    """
+    Import BackmappedTopology from the SAXS-backmapping project.
+
+    Searches for backmap_engine.py in:
+      1. Already importable (PYTHONPATH includes scripts/)
+      2. ./scripts/  relative to CWD (running from project root)
+      3. CWD itself
+
+    Returns:
+        The BackmappedTopology class.
+
+    Raises:
+        ImportError: If backmap_engine.py cannot be found.
+    """
+    # First try: already importable
+    try:
+        from backmap_engine import BackmappedTopology
+        return BackmappedTopology
+    except ImportError:
+        pass
+
+    # Second try: scripts/ relative to CWD
+    candidates = [
+        Path.cwd() / 'scripts',
+        Path.cwd(),
+    ]
+    for candidate in candidates:
+        if (candidate / 'backmap_engine.py').is_file():
+            path_str = str(candidate)
+            if path_str not in sys.path:
+                sys.path.insert(0, path_str)
+            from backmap_engine import BackmappedTopology
+            return BackmappedTopology
+
+    raise ImportError(
+        "Cannot find backmap_engine.py. Run from the SAXS-backmapping "
+        "project root, or set PYTHONPATH to include its scripts/ directory."
+    )
 
 
 def build_output_paths(base: str, frame_range: range) -> List[Path]:
@@ -56,7 +103,7 @@ def build_output_paths(base: str, frame_range: range) -> List[Path]:
 def invoke_cuda_backend(
     required_params: Dict[str, Any],
     advanced_params: Dict[str, Any],
-    topology: Topology
+    topology,
 ) -> List[str]:
     """
     Invoke the CUDA backend for SAXS calculation.
@@ -64,7 +111,7 @@ def invoke_cuda_backend(
     Args:
         required_params: Required calculation parameters
         advanced_params: Optional/advanced parameters
-        topology: Topology object with molecular structure
+        topology: Topology or BackmappedTopology object with molecular structure
 
     Returns:
         List of result summary lines
@@ -177,9 +224,26 @@ def run_saxs_calculation(
     logger.info(f"Loading topology: {topology_path.name}")
     logger.info(f"Loading trajectory: {trajectory_path.name}")
 
-    # Load topology
-    topo = Topology(str(topology_path), str(trajectory_path))
-    total_frames = topo.universe.trajectory.n_frames
+    # Load topology — standard or coarse-grained backmapped
+    coarse_grained = advanced_params.get("coarse_grained", False)
+
+    if coarse_grained:
+        BackmappedTopology = _import_backmapped_topology()
+        logger.info(
+            "Coarse-grained mode: backmapping CG trajectory to all-atom"
+        )
+        topo = BackmappedTopology(
+            cg_top=str(topology_path),
+            cg_traj=str(trajectory_path),
+            model_dirs=advanced_params["cg_models"],
+            mappings_dir=advanced_params.get("cg_mappings", "data/mappings"),
+            template_dir=advanced_params.get("cg_templates", "."),
+            device=advanced_params.get("cg_device", "cpu"),
+        )
+    else:
+        topo = Topology(str(topology_path), str(trajectory_path))
+
+    total_frames = topo.n_frames
 
     # Validate frame indices
     if begin >= total_frames:
@@ -191,17 +255,23 @@ def run_saxs_calculation(
             f"Last frame {end} exceeds available frames (0-{total_frames - 1})"
         )
 
-    # Report molecular composition
+    # Report system composition
     frame_range = range(begin, end + 1)
     output_base = advanced_params.get("out", "") or ""
     output_paths = build_output_paths(output_base, frame_range)
 
     lines = []
-    counts = topo.count_molecules()
-    molecule_summary = (
-        f"Molecule counts — total: {counts[0]}, proteins: {counts[1]}, "
-        f"waters: {counts[2]}, ions: {counts[3]}, others: {counts[4]}"
-    )
+    if coarse_grained:
+        molecule_summary = (
+            f"Backmapped system: {topo.n_atoms} AA atoms from "
+            f"{total_frames} CG frames"
+        )
+    else:
+        counts = topo.count_molecules()
+        molecule_summary = (
+            f"Molecule counts — total: {counts[0]}, proteins: {counts[1]}, "
+            f"waters: {counts[2]}, ions: {counts[3]}, others: {counts[4]}"
+        )
     logger.info(molecule_summary)
     lines.append(molecule_summary)
 

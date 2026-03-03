@@ -32,9 +32,14 @@ def build_cli_parser() -> argparse.ArgumentParser:
         description="CUDA-accelerated SAXS calculation from MD trajectories",
         epilog="""
 Examples:
+  # All-atom trajectory:
   %(prog)s -s protein.tpr -x traj.xtc -g 64 -b 0 -e 100
   %(prog)s -s system.tpr -x traj.xtc -g 128 --water tip3p --na 150
   %(prog)s -s system.tpr -x traj.xtc --info  # Print system information
+
+  # Coarse-grained trajectory (backmapped on the fly):
+  %(prog)s -s cg_system.tpr -x cg_traj.xtc --cg \\
+      --cg-models models_bonded models_dopc -g 128 -b 0 -e 60
 """,
         formatter_class=argparse.RawDescriptionHelpFormatter
     )
@@ -177,6 +182,54 @@ Examples:
         dest="save_reference",
         action="store_true",
         help="Save to reference solvent database (requires write permission)"
+    )
+
+    # Coarse-grained backmapping
+    cg_group = parser.add_argument_group(
+        "Coarse-grained backmapping",
+        "Use ML-backmapped all-atom coordinates from a Martini CG trajectory. "
+        "When --cg is set, -s/-x specify the CG topology/trajectory and the "
+        "backmapping models reconstruct AA positions on the fly for SAXS."
+    )
+    cg_group.add_argument(
+        "--cg", "--coarse-grained",
+        dest="coarse_grained",
+        action="store_true",
+        help="Enable coarse-grained backmapping mode"
+    )
+    cg_group.add_argument(
+        "--cg-models",
+        dest="cg_models",
+        nargs='+',
+        metavar="DIR",
+        help=(
+            "Model directories containing trained cVAE weights and config.json. "
+            "One per molecule family, e.g. --cg-models models_bonded models_dopc"
+        )
+    )
+    cg_group.add_argument(
+        "--cg-mappings",
+        dest="cg_mappings",
+        default="data/mappings",
+        metavar="DIR",
+        help="Directory with *_martini.yaml atom-to-bead mapping files (default: data/mappings)"
+    )
+    cg_group.add_argument(
+        "--cg-templates",
+        dest="cg_templates",
+        default=".",
+        metavar="DIR",
+        help=(
+            "Directory with <mol>_model.pdb single-molecule template files "
+            "(default: current directory)"
+        )
+    )
+    cg_group.add_argument(
+        "--cg-device",
+        dest="cg_device",
+        default="cpu",
+        choices=["cuda", "cpu"],
+        help="Device for backmapping inference (default: cpu)"
     )
 
     return parser
@@ -385,6 +438,11 @@ def run_cli(args: List[str]) -> int:
     # Determine last frame
     last_frame = namespace.end if namespace.end is not None else namespace.begin
 
+    # Validate CG mode requirements
+    if namespace.coarse_grained and not namespace.cg_models:
+        logger.error("--cg-models is required when --cg is set")
+        return 1
+
     # Build parameter dictionaries
     required_params = {
         "topology": namespace.topology,
@@ -406,6 +464,14 @@ def run_cli(args: List[str]) -> int:
         "chlorine": namespace.cl,
         "simulation": "",
     }
+
+    # Add CG backmapping parameters
+    if namespace.coarse_grained:
+        advanced_params["coarse_grained"] = True
+        advanced_params["cg_models"] = namespace.cg_models
+        advanced_params["cg_mappings"] = namespace.cg_mappings
+        advanced_params["cg_templates"] = namespace.cg_templates
+        advanced_params["cg_device"] = namespace.cg_device
 
     # Run SAXS calculation
     try:
